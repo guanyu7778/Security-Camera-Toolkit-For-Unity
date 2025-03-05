@@ -12,7 +12,7 @@
 
 * 实现了海康的 NVR 连接与监控的实时播放
 * 实现了宇视的 NVR 连接与监控的实时播放，由@[Danchuan](https://github.com/Danchuan) PR 支持
-* 实现了宇视的 PTZ 控制，由@[Danchuan](https://github.com/Danchuan) PR 支持
+* 实现了宇视的 PTZ 控制，由@[Danchuan](https://github.com/Danchuan) PR 支持（计划中，具体进度及是否继续开源请询问他）
 
 
 ## 动画演示

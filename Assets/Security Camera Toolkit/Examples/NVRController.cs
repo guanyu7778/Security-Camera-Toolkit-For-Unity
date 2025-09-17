@@ -11,7 +11,7 @@ namespace zFramework.Media.Demo
     public class NVRController : MonoBehaviour
     {
         public Button login_bt;
-        public Button logout_bt;
+        public Button logout_bt; 
         public Dropdown dropdown;
         SecurityCamera cam;
         Text login, logout;

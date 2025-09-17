@@ -1,34 +1,14 @@
 ﻿{
     "arr": [
         {
-            "host": "192.168.110.142:8000",
+            "host": "192.168.0.202:8000",
             "type": 0,
             "mapping": "",
             "enableMapping": false,
             "userName": "admin",
-            "password": "Admin123456",
+            "password": "lx20111205",
             "enable": true,
-            "description": "25 块钱包邮的网络摄像头55"
-        },
-        {
-            "host": "192.168.110.141:8001",
-            "type": 2,
-            "mapping": "",
-            "enableMapping": false,
-            "userName": "admin",
-            "password": "Admin123456",
-            "enable": true,
-            "description": "25 块钱包邮的网络摄像头"
-        },
-        {
-            "host": "192.168.110.141:8002",
-            "type": 1,
-            "mapping": "",
-            "enableMapping": false,
-            "userName": "admin",
-            "password": "Admin123456",
-            "enable": true,
-            "description": "25 块钱包邮的网络摄像头"
+            "description": "此配置由机器生成，请补全信息！"
         }
     ]
 }

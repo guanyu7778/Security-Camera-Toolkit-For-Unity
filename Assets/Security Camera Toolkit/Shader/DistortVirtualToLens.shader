@@ -25,6 +25,7 @@ Shader "MR/DistortVirtualToLens"
                 float4 _CamIntrinsics;     // (fx, fy, cx, cy)
                 float4 _DistRadial;        // (k1, k2, k3, 0)
                 float4 _DistTangential;    // (p1, p2, 0, 0)
+                float4 _VirtualIntrinsics; // (fx, fy, cx, cy) after frustum cover
                 float4 _TexSize;           // (w, h, 1/w, 1/h)
 
                 struct appdata { float4 vertex:POSITION; float2 uv:TEXCOORD0; };
@@ -65,8 +66,11 @@ Shader "MR/DistortVirtualToLens"
                     float cx = _CamIntrinsics.z, cy = _CamIntrinsics.w;
                     float2 xd = float2((x_d - cx) / fx, (y_d - cy) / fy);
                     float2 xu = InverseDistort(xd,_DistRadial,_DistTangential);
-                    float x_u = xu.x * fx + cx, y_u = xu.y * fy + cy;
-                    return float2(x_u / w, y_u / h);
+                    float fxv = _VirtualIntrinsics.x, fyv = _VirtualIntrinsics.y;
+                    float cxv = _VirtualIntrinsics.z, cyv = _VirtualIntrinsics.w;
+                    float x_u = xu.x * fxv + cxv;
+                    float y_u = xu.y * fyv + cyv;
+                    return float2(x_u * _TexSize.z, y_u * _TexSize.w);
                 }
 
                 fixed4 frag(v2f i) :SV_Target

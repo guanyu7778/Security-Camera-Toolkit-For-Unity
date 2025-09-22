@@ -29,6 +29,7 @@ namespace zFramework.Media
         string frameLoad, frameRender, frameDrop;
         [Space(8)]
         public VideoRendererEvent OnStatisticsReported = new VideoRendererEvent();
+        public AprilTagColor32SpanProvider _provider;
         #endregion
 
         #region MonoBehaviour Callbacks
@@ -37,6 +38,7 @@ namespace zFramework.Media
         protected void OnDisable() => CreateEmptyVideoTextures();
         void Start()
         {
+            _provider = new AprilTagColor32SpanProvider();
             // 如果你想要这个监控的画面同步到其他的监控上，下面这句话注释掉即可
             monitor.material = new Material(monitor.material);
             // 不用找为什么 YUV 材质球挂载在 RawImage 之后就只读了，别慌，那是因为 RawImage 存在于 Mask 之下导致的
@@ -167,7 +169,8 @@ namespace zFramework.Media
                         _textureU.Apply();
                         _textureV.Apply();
                     }
-
+                    if (_provider == null) _provider = new AprilTagColor32SpanProvider();
+                    _provider.UpdateFromI422_Y(frame.Buffer_Y, lumaWidth, lumaHeight, lumaWidth);
                     // Recycle the video frame packet for a later frame
                     videoFrameQueue.RecycleStorage(frame);
                 }

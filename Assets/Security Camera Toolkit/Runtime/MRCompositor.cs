@@ -1,6 +1,6 @@
 // MRCompositor.cs
-// µ¥ÎÄ¼þ°æ£º¶ÁÈ¡±ê¶¨ ¡ú ¾«È·ÊÓ×¶ ¡ú ÐéÄâ²ãäÖÈ¾µ½RT ¡ú °´»û±ä¡°Å¤Íä¡±µþ¼Óµ½ÊÓÆµ
-// ÒÀÀµ Newtonsoft.Json£¨Package: com.unity.nuget.newtonsoft-json£©
+// ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½æ£ºï¿½ï¿½È¡ï¿½ê¶¨ ï¿½ï¿½ ï¿½ï¿½È·ï¿½ï¿½×¶ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¾ï¿½ï¿½RT ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ä¡°Å¤ï¿½ä¡±ï¿½ï¿½ï¿½Óµï¿½ï¿½ï¿½Æµ
+// ï¿½ï¿½ï¿½ï¿½ Newtonsoft.Jsonï¿½ï¿½Package: com.unity.nuget.newtonsoft-jsonï¿½ï¿½
 
 using System.IO;
 using UnityEngine;
@@ -11,40 +11,40 @@ using Newtonsoft.Json;
 public class MRCompositor : MonoBehaviour
 {
     [Header("Calibration JSON in StreamingAssets")]
-    [Tooltip("Î»ÓÚ Assets/StreamingAssets/ ÏÂµÄÎÄ¼þÃû£¬±ÈÈç calibration.json")]
+    [Tooltip("Î»ï¿½ï¿½ Assets/StreamingAssets/ ï¿½Âµï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ calibration.json")]
     public string calibrationFileName = "calibration.json";
 
     [Header("Cameras")]
-    public Camera virtualCamera;    // Ö»äÖÈ¾ÐéÄâ²ã ¡ú RT£¨Í¸Ã÷£©
-    public Camera backgroundCamera; // ÄãµÄ±³¾°ÊÓÆµÏà»ú£¨¿É²»Ìî£©
+    public Camera virtualCamera;    // Ö»ï¿½ï¿½È¾ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ RTï¿½ï¿½Í¸ï¿½ï¿½ï¿½ï¿½
+    public Camera backgroundCamera; // ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É²ï¿½ï¿½î£©
 
     [Header("Composite Material (Distort)")]
-    [Tooltip("Ê¹ÓÃ Shader: MR/DistortVirtualToLens£¨»ò Hidden/DistortVirtualToLens£©£»Îª¿Õ»á×Ô¶¯´´½¨")]
+    [Tooltip("Ê¹ï¿½ï¿½ Shader: MR/DistortVirtualToLensï¿½ï¿½ï¿½ï¿½ Hidden/DistortVirtualToLensï¿½ï¿½ï¿½ï¿½Îªï¿½Õ»ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½")]
     public Material distortMaterial;
 
     [Header("Output (UI)")]
-    public RawImage outputRawImage;  // È«ÆÁ RawImage ºÏ³É 
-    public Canvas outputCanvas;      // ÈôÎª¿Õ½«×Ô¶¯´´½¨
+    public RawImage outputRawImage;  // È«ï¿½ï¿½ RawImage ï¿½Ï³ï¿½ 
+    public Canvas outputCanvas;      // ï¿½ï¿½Îªï¿½Õ½ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½
 
     [Header("RenderTexture Size (optional)")]
-    public Vector2Int virtualRTSize = new Vector2Int(0, 0); // Áô¿ÕÔòÓÃ JSON µÄ image_size
+    public Vector2Int virtualRTSize = new Vector2Int(0, 0); // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ JSON ï¿½ï¿½ image_size
 
     [Header("Projection")]
-    [Tooltip("ÆôÓÃ¡°¾«È·ÊÓ×¶¡±£º·´ËãÆÁÄ»ËÄ±ßÔÚÎÞ»û±ä¿Õ¼äµÄ·¶Î§£¬ÏñËØ¼¶ÆÌÂúÇÒ¶ÔÆë")]
+    [Tooltip("ï¿½ï¿½ï¿½Ã¡ï¿½ï¿½ï¿½È·ï¿½ï¿½×¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä»ï¿½Ä±ï¿½ï¿½ï¿½ï¿½Þ»ï¿½ï¿½ï¿½Õ¼ï¿½Ä·ï¿½Î§ï¿½ï¿½ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò¶ï¿½ï¿½ï¿½")]
     public bool exactCover = true;
     [Range(16, 1024)]
-    public int samplesPerEdge = 64; // ¾«È·ÊÓ×¶±ß½ç²ÉÑùµãÊý
+    public int samplesPerEdge = 64; // ï¿½ï¿½È·ï¿½ï¿½×¶ï¿½ß½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     public float nearClip = 0.01f;
     public float farClip = 100f;
 
     [Header("Virtual Camera")]
-    public Color virtualClearColor = new Color(0, 0, 0, 0); // Í¸Ã÷±³¾°
+    public Color virtualClearColor = new Color(0, 0, 0, 0); // Í¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
-    // ÄÚ²¿×ÊÔ´
+    // ï¿½Ú²ï¿½ï¿½ï¿½Ô´
     private RenderTexture _virtualRT;
     private CalibData _calib;
 
-    #region ==== Calib Types & Utils (ÄÚÇ¶) ====
+    #region ==== Calib Types & Utils (ï¿½ï¿½Ç¶) ====
 
     [System.Serializable]
     public class CalibData
@@ -52,7 +52,7 @@ public class MRCompositor : MonoBehaviour
         [JsonProperty("image_size")] public int[] image_size;                // [width, height]
         [JsonProperty("camera_matrix")] public float[][] camera_matrix;           // 3x3
         [JsonProperty("distortion_coefficients")] public float[] distortion_coefficients;   // [k1,k2,p1,p2,k3]
-        [JsonProperty("unity_projection_matrix")] public float[][] unity_projection_matrix; // 4x4£¨¿ÉÄÜÈ±Ê¡£©
+        [JsonProperty("unity_projection_matrix")] public float[][] unity_projection_matrix; // 4x4ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È±Ê¡ï¿½ï¿½
     }
 
     static class CalibUtil
@@ -98,7 +98,7 @@ public class MRCompositor : MonoBehaviour
             return new Vector4(d.distortion_coefficients[2], d.distortion_coefficients[3], 0f, 0f);
         }
 
-        // ³¢ÊÔÖ±½ÓÓÃ JSON µÄ 4x4 Í¶Ó°£¨Èô´æÔÚ£©
+        // ï¿½ï¿½ï¿½ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ JSON ï¿½ï¿½ 4x4 Í¶Ó°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú£ï¿½
         public static bool TryGetJsonProjection(CalibData d, out Matrix4x4 proj)
         {
             proj = Matrix4x4.identity;
@@ -117,7 +117,7 @@ public class MRCompositor : MonoBehaviour
             return true;
         }
 
-        // ÓÉÄÚ²ÎÖ±½Ó¹¹Ôì£¨Ã»ÓÐ¡°¾«È·¸²¸Ç¡±£©
+        // ï¿½ï¿½ï¿½Ú²ï¿½Ö±ï¿½Ó¹ï¿½ï¿½ì£¨Ã»ï¿½Ð¡ï¿½ï¿½ï¿½È·ï¿½ï¿½ï¿½Ç¡ï¿½ï¿½ï¿½
         public static Matrix4x4 BuildFrustumFromIntrinsics(Vector4 intr, Vector2Int wh, float near, float far)
         {
             float fx = intr.x, fy = intr.y, cx = intr.z, cy = intr.w;
@@ -141,20 +141,20 @@ public class MRCompositor : MonoBehaviour
             Debug.LogError("[MRCompositor] virtualCamera is null."); enabled = false; return;
         }
 
-        // ×Ô¶¯´´½¨²ÄÖÊ£¨Shader ÃûÓÅÏÈ MR/DistortVirtualToLens£¬ÕÒ²»µ½ÔÙÓÃ Hidden/DistortVirtualToLens£©
+        // ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê£ï¿½Shader ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ MR/DistortVirtualToLensï¿½ï¿½ï¿½Ò²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Hidden/DistortVirtualToLensï¿½ï¿½
         if (distortMaterial == null)
         {
             Shader sh = Shader.Find("MR/DistortVirtualToLens");
             if (sh == null) sh = Shader.Find("Hidden/DistortVirtualToLens");
             if (sh == null)
             {
-                Debug.LogError("[MRCompositor] Shader 'MR/DistortVirtualToLens' not found. ÇëÈ·ÈÏ shader ÔÚ Assets/ ÇÒÃüÃûÆ¥Åä¡£");
+                Debug.LogError("[MRCompositor] Shader 'MR/DistortVirtualToLens' not found. ï¿½ï¿½È·ï¿½ï¿½ shader ï¿½ï¿½ Assets/ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¥ï¿½ä¡£");
                 enabled = false; return;
             }
             distortMaterial = new Material(sh) { name = "DistortVirtualToLens (runtime)" };
         }
 
-        // ¶ÁÈ¡ JSON£¨Windows£ºÎÄ¼þ IO£©
+        // ï¿½ï¿½È¡ JSONï¿½ï¿½Windowsï¿½ï¿½ï¿½Ä¼ï¿½ IOï¿½ï¿½
         string path = Path.Combine(Application.streamingAssetsPath, calibrationFileName);
         if (!File.Exists(path))
         {
@@ -178,12 +178,12 @@ public class MRCompositor : MonoBehaviour
 
     private void InitializeWithCalib(CalibData calib)
     {
-        // ---- 1) ·Ö±æÂÊ ----
+        // ---- 1) ï¿½Ö±ï¿½ï¿½ï¿½ ----
         Vector2Int whFromJson = CalibUtil.GetImageSize(calib);
         int w = virtualRTSize.x > 0 ? virtualRTSize.x : whFromJson.x;
         int h = virtualRTSize.y > 0 ? virtualRTSize.y : whFromJson.y;
 
-        // ---- 2) ´´½¨ÐéÄâÏà»ú RT ----
+        // ---- 2) ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ RT ----
         _virtualRT = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32)
         {
             name = "VirtualRT",
@@ -192,14 +192,14 @@ public class MRCompositor : MonoBehaviour
         };
         _virtualRT.Create();
 
-        // ---- 3) ÐéÄâÏà»úÅäÖÃ£¨Í¸Ã÷£© ----
+        // ---- 3) ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã£ï¿½Í¸ï¿½ï¿½ï¿½ï¿½ ----
         virtualCamera.targetTexture = _virtualRT;
         virtualCamera.clearFlags = CameraClearFlags.SolidColor;
         virtualCamera.backgroundColor = virtualClearColor;
         virtualCamera.allowHDR = false;
         virtualCamera.allowMSAA = false;
 
-        // ---- 4) ÉèÖÃÐéÄâÏà»úÍ¶Ó° ----
+        // ---- 4) ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¶Ó° ----
         var intr = CalibUtil.GetIntrinsicsXYCXCY(calib);
         var k123 = CalibUtil.GetRadialK1K2K3(calib);
         var p12 = CalibUtil.GetTangentialP1P2(calib);
@@ -249,7 +249,7 @@ public class MRCompositor : MonoBehaviour
         }
 
 
-        // ---- 5) ¸ø»û±ä²ÄÖÊÎ¹²ÎÊý£¨ÏñËØµ¥Î»£©----
+        // ---- 5) ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Øµï¿½Î»ï¿½ï¿½----
         Vector4 texSize = new Vector4(w, h, 1f / w, 1f / h);
         distortMaterial.SetVector("_CamIntrinsics", intr);   // (fx, fy, cx, cy)
         distortMaterial.SetVector("_DistRadial", k123);   // (k1, k2, k3, 0)
@@ -257,13 +257,13 @@ public class MRCompositor : MonoBehaviour
         distortMaterial.SetVector("_VirtualIntrinsics", samplingIntr);
         distortMaterial.SetVector("_TexSize", texSize);
 
-        // **ÈôÄãµÄ shader ÊôÐÔÃû²»ÊÇ _MainTex£¨±ÈÈç _SrcTex£©£¬¿ÉÒÔ¼ÓÏÂÃæÒ»ÐÐ±£Ö¤Á½±ß¶¼°ó¶¨**
+        // **ï¿½ï¿½ï¿½ï¿½ï¿½ shader ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ _MainTexï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ _SrcTexï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½Ð±ï¿½Ö¤ï¿½ï¿½ï¿½ß¶ï¿½ï¿½ï¿½**
         distortMaterial.SetTexture("_MainTex", _virtualRT);
         distortMaterial.SetTexture("_SrcTex", _virtualRT);
 
-        // ---- 6) Êä³öµþ¼Ó UI ----
+        // ---- 6) ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ UI ----
         EnsureOutputUI();
-        outputRawImage.texture = _virtualRT;      // RawImage »á°ÑËü°ó¶¨µ½ _MainTex
+        outputRawImage.texture = _virtualRT;      // RawImage ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ó¶¨µï¿½ _MainTex
         outputRawImage.material = distortMaterial;
         outputRawImage.color = Color.white;
         outputRawImage.raycastTarget = false;
@@ -292,7 +292,7 @@ public class MRCompositor : MonoBehaviour
         goImg.transform.SetParent(outputCanvas.transform, false);
         outputRawImage = goImg.GetComponent<RawImage>();
 
-        // È«ÆÁÆÌÂú
+        // È«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         var rt = outputRawImage.rectTransform;
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
@@ -309,10 +309,10 @@ public class MRCompositor : MonoBehaviour
         }
     }
 
-    #region ==== ¾«È·ÊÓ×¶£º·´Ëã±ß½ç²¢¹¹Ôì Frustum ====
+    #region ==== ï¿½ï¿½È·ï¿½ï¿½×¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ß½ç²¢ï¿½ï¿½ï¿½ï¿½ Frustum ====
 
-    // ¼ÆËã£ºÒª¸²¸ÇÕû¸ö¡°»û±äºó¡±µÄÆÁÄ»¾ØÐÎ [0..w]x[0..h]£¬
-    // ÔÚ¡°ÎÞ»û±ä¹éÒ»»¯¡±Æ½ÃæÉÏÐèÒªµÄ×îÐ¡/×î´ó·¶Î§£¬È»ºó¹¹½¨ÀëÖáÊÓ×¶¡£
+    // ï¿½ï¿½ï¿½ã£ºÒªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ó¡±µï¿½ï¿½ï¿½Ä»ï¿½ï¿½ï¿½ï¿½ [0..w]x[0..h]ï¿½ï¿½
+    // ï¿½Ú¡ï¿½ï¿½Þ»ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Æ½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½Ð¡/ï¿½ï¿½ï¿½Î§ï¿½ï¿½È»ï¿½ó¹¹½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×¶ï¿½ï¿½
     static Matrix4x4 BuildFrustumCoveringDistortedImage(
         Vector4 intr, Vector4 radial, Vector4 tangential, Vector2Int wh,
         float near, float far, int samplesPerEdge,
@@ -330,10 +330,10 @@ public class MRCompositor : MonoBehaviour
             for (int i = 0; i < samplesPerEdge; i++)
             {
                 float t = (samplesPerEdge == 1) ? 0.0f : (i / (samplesPerEdge - 1f));
-                Vector2 p = edgePointFunc(i); // ÏñËØ×ø±ê£¨»û±äºó£©
+                Vector2 p = edgePointFunc(i); // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ê£¨ï¿½ï¿½ï¿½ï¿½ï¿½
                 float xd = (p.x - cx) / fx;
                 float yd = (p.y - cy) / fy;
-                Vector2 xu = InverseDistortNorm(new Vector2(xd, yd), radial, tangential); // ÎÞ»û±ä¹éÒ»»¯
+                Vector2 xu = InverseDistortNorm(new Vector2(xd, yd), radial, tangential); // ï¿½Þ»ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½
                 minXn = Mathf.Min(minXn, xu.x);
                 maxXn = Mathf.Max(maxXn, xu.x);
                 minYn = Mathf.Min(minYn, xu.y);
@@ -341,30 +341,30 @@ public class MRCompositor : MonoBehaviour
             }
         };
 
-        // ËÄÌõ±ß£ºÉÏ¡¢ÏÂ¡¢×ó¡¢ÓÒ£¨ÏñËØ×ø±êÔ­µã×óÉÏ£¬yÏòÏÂ£©
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½Ï¡ï¿½ï¿½Â¡ï¿½ï¿½ï¿½ï¿½Ò£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô­ï¿½ï¿½ï¿½ï¿½ï¿½Ï£ï¿½yï¿½ï¿½ï¿½Â£ï¿½
         sampleEdge(i => new Vector2(Mathf.Lerp(0, w, i / (samplesPerEdge - 1f)), 0)); // top
         sampleEdge(i => new Vector2(Mathf.Lerp(0, w, i / (samplesPerEdge - 1f)), h)); // bottom
         sampleEdge(i => new Vector2(0, Mathf.Lerp(0, h, i / (samplesPerEdge - 1f)))); // left
         sampleEdge(i => new Vector2(w, Mathf.Lerp(0, h, i / (samplesPerEdge - 1f)))); // right
 
-        // ×¢Òâ£ºÏñËØ×ø±ê y ÏòÏÂ£»Unity Í¶Ó° y ÏòÉÏ
+        // ×¢ï¿½â£ºï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ y ï¿½ï¿½ï¿½Â£ï¿½Unity Í¶Ó° y ï¿½ï¿½ï¿½ï¿½
         float l = near * minXn;
         float r = near * maxXn;
-        float t = -near * minYn;   // top = -near * (×îÐ¡ yn)
-        float b = -near * maxYn;   // bottom = -near * (×î´ó yn)
+        float t = -near * minYn;   // top = -near * (ï¿½ï¿½Ð¡ yn)
+        float b = -near * maxYn;   // bottom = -near * (ï¿½ï¿½ï¿½ yn)
 
         undistMin = new Vector2(minXn, minYn);
         undistMax = new Vector2(maxXn, maxYn);
         return Matrix4x4.Frustum(l, r, b, t, near, far);
     }
 
-    // Óë shader Í¬²½µÄ¡°»û±äÄæ¡±µü´ú£¨ÊäÈë/Êä³ö¾ùÎª¹éÒ»»¯×ø±ê£©
+    // ï¿½ï¿½ shader Í¬ï¿½ï¿½ï¿½Ä¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ¡±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ê£©
     static Vector2 InverseDistortNorm(Vector2 xd, Vector4 radial, Vector4 tangential)
     {
         float k1 = radial.x, k2 = radial.y, k3 = radial.z;
         float p1 = tangential.x, p2 = tangential.y;
 
-        Vector2 x = xd; // ³õÖµ
+        Vector2 x = xd; // ï¿½ï¿½Öµ
         for (int i = 0; i < 5; i++)
         {
             float r2 = x.x * x.x + x.y * x.y;
@@ -375,7 +375,7 @@ public class MRCompositor : MonoBehaviour
             float yt = p1 * (r2 + 2f * x.y * x.y) + 2f * p2 * x.x * x.y;
             Vector2 f = new Vector2(x.x * radialF + xt, x.y * radialF + yt) - xd;
 
-            // ÊýÖµÑÅ¿É±È
+            // ï¿½ï¿½Öµï¿½Å¿É±ï¿½
             float eps = 1e-3f;
             Vector2 dx = new Vector2(eps, 0), dy = new Vector2(0, eps);
             Vector2 fx = DistortForwardNorm(x + dx, radial, tangential) - DistortForwardNorm(x - dx, radial, tangential);

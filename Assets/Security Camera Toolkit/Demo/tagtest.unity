@@ -413,7 +413,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 60
+  field of view: 35
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -611,10 +611,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   screenshot: {fileID: 2800000, guid: 79c2743cca835984e95cb66bdecfed3d, type: 3}
-  tagSizeMeters: 0.2
+  tagSizeMeters: 0.105
   customIntrinsics: {x: 0, y: 0, z: 0, w: 0}
   targetCamera: {fileID: 961739752}
+  cubeSizeMeters: 0.2
   cubeMat: {fileID: 2100000, guid: 781021a5047c1944791fa7327af1ede8, type: 2}
+  fov: 35
 --- !u!1 &1988252903
 GameObject:
   m_ObjectHideFlags: 0

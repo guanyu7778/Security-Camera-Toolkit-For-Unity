@@ -16,10 +16,13 @@ public class AprilTagScreenshotTest : MonoBehaviour
 
     [Header("Visual")]
     public Camera targetCamera;            // 用来叠加Cube的相机（为空就用 Camera.main）
+    public float cubeSizeMeters = 0.05f;      // 可选，Cube的边长（米）
     public Material cubeMat;               // 可选，给Cube的材质
 
     TagDetector _detector;
     TagDrawer tagDrawer;
+
+    public float fov;
 
     void Start()
     {
@@ -66,17 +69,18 @@ public class AprilTagScreenshotTest : MonoBehaviour
         ReadOnlySpan<Color32> pixelSpan = pixels;
 
         float horizontalFovDegrees = ComputeHorizontalFovDegrees();
-        _detector.ProcessImage(pixelSpan, 60 * Mathf.Deg2Rad, Mathf.Max(0.001f, tagSizeMeters));
-        Debug.Log($"[AprilTagScreenshotTest] 检测到 {_detector.DetectedTags.Count()} 个 AprilTag，FOV {Camera.main.fieldOfView * Mathf.Deg2Rad}°");
+        _detector.ProcessImage(pixelSpan, fov * Mathf.Deg2Rad, Mathf.Max(0.001f, tagSizeMeters));
+        Debug.Log($"[AprilTagScreenshotTest] 检测到 {_detector.DetectedTags.Count()} 个 AprilTag，FOV {fov * Mathf.Deg2Rad}°");
         foreach (var tag in _detector.DetectedTags)
         {
             tagDrawer.Draw(tag.ID, tag.Position, tag.Rotation, tagSizeMeters);
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
             cube.transform.position = tag.Position;
             cube.transform.rotation = tag.Rotation;
-            cube.transform.localScale = Vector3.one * tagSizeMeters;
+            cube.transform.localScale = Vector3.one * cubeSizeMeters;
             if (cubeMat != null)
                 cube.GetComponent<Renderer>().material = cubeMat;
+            cube.transform.Translate(cube.transform.forward * -1 * 0.5f * cubeSizeMeters, Space.World);
             Debug.Log($"[AprilTagScreenshotTest] Tag ID {tag.ID} 位于 {tag.Position}, 旋转 {tag.Rotation.eulerAngles}");
         }
     }

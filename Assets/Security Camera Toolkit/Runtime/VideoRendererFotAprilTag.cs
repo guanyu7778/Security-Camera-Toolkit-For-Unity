@@ -1,8 +1,8 @@
-﻿// Copyright (c) https://github.com/Bian-Sh
+// Copyright (c) https://github.com/Bian-Sh
 // Licensed under the MIT License.
 using System;
 using System.IO;
-using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Linq;                     // <— JSON 解析
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Events;
@@ -12,12 +12,16 @@ using UnityEngine.UI;
 namespace zFramework.Media
 {
     /// <summary>
-    /// 视频渲染器：将 YUV 格式画面转换为 RGB888 并合并成监控画面
+    /// 视频渲染器（整合 GPU 去畸变 + 全彩显示 + 回读给 AprilTag）
+    /// - 从 I422 (YUV) 三平面创建 Texture2D
+    /// - 调去畸变的 YUV 合成 shader 输出到全彩 RT（显示）
+    /// - 按需 AsyncGPUReadback 回读 RGBA32 → 灰度 → 事件回调给 AprilTag
+    /// - 不改变分辨率/FOV
     /// </summary>
     [RequireComponent(typeof(RawImage))]
-    public class VideoRenderer : MonoBehaviour
+    public class VideoRendererFotAprilTag : MonoBehaviour
     {
-       #region Show In Inspector (原有)
+        #region Show In Inspector (原有)
 #pragma warning disable CS0414
         [Header("渲染状态:"), SerializeField] private bool isRendering;
 #pragma warning restore CS0414
@@ -69,9 +73,9 @@ namespace zFramework.Media
         public event Action<byte[], int, int> OnGrayFrameReady; // 回调给 AprilTag
 
         // Shader属性名（若你的shader属性名不同，可以改这里）
-        readonly int ID_YTex = Shader.PropertyToID("_YTex");
-        readonly int ID_UTex = Shader.PropertyToID("_UTex");
-        readonly int ID_VTex = Shader.PropertyToID("_VTex");
+        readonly int ID_YTex = Shader.PropertyToID("_YTexture");
+        readonly int ID_UTex = Shader.PropertyToID("_UTexture");
+        readonly int ID_VTex = Shader.PropertyToID("_VTexture");
         readonly int ID_YSize = Shader.PropertyToID("_YSize");     // (w,h,1/w,1/h)
         readonly int ID_UVSize = Shader.PropertyToID("_UVSize");   // (w,h,1/w,1/h)
         readonly int ID_K = Shader.PropertyToID("_K");             // (fx,fy,cx,cy)
@@ -173,8 +177,6 @@ namespace zFramework.Media
 
         private void TryProcessI422VideoFrame()
         {
-            Debug.Log($"Y:{_textureY?.width}x{_textureY?.height}, U:{_textureU?.width}x{_textureU?.height}, V:{_textureV?.width}x{_textureV?.height}");
-
             // 控帧率（保留你的逻辑）
             if (preFrameRate != framerate)
             {
@@ -203,19 +205,19 @@ namespace zFramework.Media
                     // ——— 1) 创建/更新三路 R8 纹理
                     if (_textureY == null || _textureY.width != lumaWidth || _textureY.height != lumaHeight)
                     {
-                        _textureY = new Texture2D(lumaWidth, lumaHeight, TextureFormat.R8, mipChain: false, linear: true);
+                        _textureY = new Texture2D(lumaWidth, lumaHeight, TextureFormat.Alpha8, mipChain: false, linear: true);
                         undistortCompositeMaterial.SetTexture(ID_YTex, _textureY);
                     }
                     int chromaWidth = lumaWidth / 2;
                     int chromaHeight = lumaHeight / 2;
                     if (_textureU == null || _textureU.width != chromaWidth || _textureU.height != chromaHeight)
                     {
-                        _textureU = new Texture2D(chromaWidth, chromaHeight, TextureFormat.R8, mipChain: false, linear: true);
+                        _textureU = new Texture2D(chromaWidth, chromaHeight, TextureFormat.Alpha8, mipChain: false, linear: true);
                         undistortCompositeMaterial.SetTexture(ID_UTex, _textureU);
                     }
                     if (_textureV == null || _textureV.width != chromaWidth || _textureV.height != chromaHeight)
                     {
-                        _textureV = new Texture2D(chromaWidth, chromaHeight, TextureFormat.R8, mipChain: false, linear: true);
+                        _textureV = new Texture2D(chromaWidth, chromaHeight, TextureFormat.Alpha8, mipChain: false, linear: true);
                         undistortCompositeMaterial.SetTexture(ID_VTex, _textureV);
                     }
 
@@ -268,8 +270,8 @@ namespace zFramework.Media
                     }
 
                     // ——— 7) 仍保留 CPU 灰度路径（可关）
-                    // if (_provider == null) _provider = new AprilTagColor32SpanProvider();
-                    // _provider.UpdateFromI422_Y(frame.Buffer_Y, lumaWidth, lumaHeight, lumaWidth);
+                    if (_provider == null) _provider = new AprilTagColor32SpanProvider();
+                    _provider.UpdateFromI422_Y(frame.Buffer_Y, lumaWidth, lumaHeight, lumaWidth);
 
                     // 回收帧
                     videoFrameQueue.RecycleStorage(frame);
@@ -398,4 +400,3 @@ namespace zFramework.Media
         #endregion
     }
 }
-

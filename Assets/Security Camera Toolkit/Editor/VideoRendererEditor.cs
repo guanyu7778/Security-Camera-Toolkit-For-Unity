@@ -7,16 +7,28 @@ using zFramework.Media;
 [CustomEditor(typeof(VideoRenderer)), CanEditMultipleObjects]
 public class VideoRendererEditor : Editor
 {
+    // åŸæœ‰å±æ€§
     SerializedProperty queuesize;
     SerializedProperty framerate;
     SerializedProperty isrendering;
-
     SerializedProperty width;
     SerializedProperty height;
     SerializedProperty frameload;
     SerializedProperty framerend;
     SerializedProperty framedrop;
     SerializedProperty event_s;
+
+    // æ–°å¢ GPU å»ç•¸å˜ç›¸å…³
+    SerializedProperty undistortCompositeMaterial;
+    SerializedProperty UVSize;
+    SerializedProperty OutputRT;
+    SerializedProperty Preview;
+    SerializedProperty CalibrationJsonPath;
+    SerializedProperty FlipY;
+    SerializedProperty UseFullRange;
+    SerializedProperty UseBt709;
+    SerializedProperty EnableReadback;
+    SerializedProperty ReadbackEveryNFrames;
 
     private void OnEnable()
     {
@@ -29,23 +41,62 @@ public class VideoRendererEditor : Editor
         event_s = serializedObject.FindProperty("OnStatisticsReported");
         framerate = serializedObject.FindProperty("framerate");
         isrendering = serializedObject.FindProperty("isRendering");
-    }
 
+        // æ–°å¢å­—æ®µ
+        undistortCompositeMaterial = serializedObject.FindProperty("undistortCompositeMaterial");
+        UVSize = serializedObject.FindProperty("UVSize");
+        OutputRT = serializedObject.FindProperty("OutputRT");
+        Preview = serializedObject.FindProperty("Preview");
+        CalibrationJsonPath = serializedObject.FindProperty("CalibrationJsonPath");
+        FlipY = serializedObject.FindProperty("FlipY");
+        UseFullRange = serializedObject.FindProperty("UseFullRange");
+        UseBt709 = serializedObject.FindProperty("UseBt709");
+        EnableReadback = serializedObject.FindProperty("EnableReadback");
+        ReadbackEveryNFrames = serializedObject.FindProperty("ReadbackEveryNFrames");
+    }
 
     public override void OnInspectorGUI()
     {
         serializedObject.UpdateIfRequiredOrScript();
         EditorGUI.BeginChangeCheck();
 
+        // â€”â€” æ¸²æŸ“æ§åˆ¶éƒ¨åˆ†
         GUI.enabled = false;
         EditorGUILayout.PropertyField(isrendering);
         GUI.enabled = true;
-        EditorGUILayout.PropertyField(framerate);
+        EditorGUILayout.PropertyField(framerate, new GUIContent("ç›®æ ‡å¸§ç‡"));
         GUI.enabled = !Application.isPlaying || !isrendering.boolValue;
-        EditorGUILayout.PropertyField(queuesize);
+        EditorGUILayout.PropertyField(queuesize, new GUIContent("å¸§é˜Ÿåˆ—å®¹é‡"));
         GUI.enabled = true;
 
+        EditorGUILayout.Space(8);
+
+        // â€”â€” GPU å»ç•¸å˜ + åˆæˆè®¾ç½®
+        EditorGUILayout.LabelField("Undistort & Composite (GPU)", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(undistortCompositeMaterial, new GUIContent("æè´¨ (Shader)"));
+        EditorGUILayout.PropertyField(UVSize, new GUIContent("UV å¹³é¢å°ºå¯¸"));
+        EditorGUILayout.PropertyField(OutputRT, new GUIContent("è¾“å‡º RT"));
+        EditorGUILayout.PropertyField(Preview, new GUIContent("é¢„è§ˆ RawImage"));
+        EditorGUILayout.PropertyField(CalibrationJsonPath, new GUIContent("æ ‡å®š JSON è·¯å¾„"));
+
+        EditorGUILayout.PropertyField(FlipY, new GUIContent("ç¿»è½¬ Y è½´"));
+        EditorGUILayout.PropertyField(UseFullRange, new GUIContent("ä½¿ç”¨ Full Range"));
+        EditorGUILayout.PropertyField(UseBt709, new GUIContent("BT.709"));
+
+        EditorGUILayout.Space(4);
+        EditorGUILayout.PropertyField(EnableReadback, new GUIContent("å¯ç”¨ GPU å›è¯»"));
+        if (EnableReadback.boolValue)
+        {
+            EditorGUI.indentLevel++;
+            EditorGUILayout.PropertyField(ReadbackEveryNFrames, new GUIContent("å›è¯»é—´éš” (å¸§)"));
+            EditorGUI.indentLevel--;
+        }
+
+        EditorGUILayout.Space(8);
+
+        // â€”â€” è§†é¢‘ä¿¡æ¯
         DrawVideoFrameInfo();
+
         if (EditorGUI.EndChangeCheck())
         {
             serializedObject.ApplyModifiedProperties();
@@ -58,12 +109,12 @@ public class VideoRendererEditor : Editor
         EditorGUILayout.PropertyField(itr);
         if (itr.boolValue)
         {
-            using (EditorGUILayout.VerticalScope scop_v = new EditorGUILayout.VerticalScope("box"))
+            using (new EditorGUILayout.VerticalScope("box"))
             {
                 GUI.enabled = false;
-                frameload.stringValue = EditorGUILayout.TextField(new GUIContent("ÍÆÁ÷Ö¡ÂÊ£º", aboutFrameload), frameload.stringValue);
-                framerend.stringValue = EditorGUILayout.TextField(new GUIContent("È¡Á÷Ö¡ÂÊ£º", aboutFrameRend), framerend.stringValue);
-                framedrop.stringValue = EditorGUILayout.TextField(new GUIContent("¶ªÆúÖ¡ÂÊ£º", aboutFrameDrop), framedrop.stringValue);
+                frameload.stringValue = EditorGUILayout.TextField(new GUIContent("æ¨æµå¸§ç‡ï¼š", aboutFrameload), frameload.stringValue);
+                framerend.stringValue = EditorGUILayout.TextField(new GUIContent("å–æµå¸§ç‡ï¼š", aboutFrameRend), framerend.stringValue);
+                framedrop.stringValue = EditorGUILayout.TextField(new GUIContent("ä¸¢å¼ƒå¸§ç‡ï¼š", aboutFrameDrop), framedrop.stringValue);
                 GUI.enabled = true;
             }
             EditorGUILayout.Space(8);
@@ -73,21 +124,21 @@ public class VideoRendererEditor : Editor
 
     private void DrawVideoFrameInfo()
     {
-        width.isExpanded = EditorGUILayout.BeginFoldoutHeaderGroup(width.isExpanded, new GUIContent("ÊÓÆµĞÅÏ¢", aboutfoldheader));
+        width.isExpanded = EditorGUILayout.BeginFoldoutHeaderGroup(width.isExpanded, new GUIContent("è§†é¢‘ä¿¡æ¯", aboutfoldheader));
         if (width.isExpanded)
         {
-            using (EditorGUILayout.VerticalScope scop_v = new EditorGUILayout.VerticalScope("box"))
+            using (new EditorGUILayout.VerticalScope("box"))
             {
                 GUI.enabled = false;
-                width.intValue = EditorGUILayout.IntField("ÊÓÆµ¿í¶È:", width.intValue);
-                height.intValue = EditorGUILayout.IntField("ÊÓÆµ¸ß¶È:", height.intValue);
-                using (EditorGUILayout.HorizontalScope scope_h = new EditorGUILayout.HorizontalScope())
+                width.intValue = EditorGUILayout.IntField("è§†é¢‘å®½åº¦:", width.intValue);
+                height.intValue = EditorGUILayout.IntField("è§†é¢‘é«˜åº¦:", height.intValue);
+                using (new EditorGUILayout.HorizontalScope())
                 {
                     long rsl = width.intValue * height.intValue;
                     long size = rsl + rsl / 2;
-                    EditorGUILayout.LongField("Êı¾İ´óĞ¡:", size);
-                    EditorGUILayout.LabelField(" ¡Ö ", GUILayout.Width(20));
-                    EditorGUILayout.TextField((size / 1024 / 1024).ToString("F2"), GUILayout.Width(48));
+                    EditorGUILayout.LongField("æ•°æ®å¤§å°:", size);
+                    EditorGUILayout.LabelField(" â‰ˆ ", GUILayout.Width(20));
+                    EditorGUILayout.TextField((size / 1024f / 1024f).ToString("F2"), GUILayout.Width(48));
                     EditorGUILayout.LabelField(" MB", GUILayout.Width(30));
                 }
                 GUI.enabled = true;
@@ -97,10 +148,11 @@ public class VideoRendererEditor : Editor
         }
         EditorGUILayout.EndFoldoutHeaderGroup();
     }
+
     #region Tooltips
-    const string aboutFrameload = "¸ÃÊıÖµ±íÊ¾ÔÚÒ»ÃëÄÚ¼à¿Ø²¥·Å¿â ÍÆËÍµÄÊı¾İÁ¿£¨µ¥Î»£ºFPS£©";
-    const string aboutFrameRend = "¸ÃÊıÖµ±íÊ¾ÔÚÒ»ÃëÄÚ»æÖÆÔÚ RawImage ÉÏµÄÖ¡Êı£¨µ¥Î»£ºFPS£©";
-    const string aboutFrameDrop = "¸ÃÊıÖµ±íÊ¾ÔÚÒ»ÃëÄÚÒòÎª»º´æ¶ÓÁĞÂú¶ø¶ªÆúµÄÖ¡Êı£¨µ¥Î»£ºFPS£©";
-    const string aboutfoldheader = "ÓÑÇéÌáÊ¾£ºÕ¹Ê¾ÀïÃæµÄÄÚÈİ»áµ¼ÖÂ Game ´°¿ÚµôÖ¡£¬Çë±£³ÖÕÛµş";
+    const string aboutFrameload = "è¯¥æ•°å€¼è¡¨ç¤ºåœ¨ä¸€ç§’å†…ç›‘æ§æ’­æ”¾åº“ æ¨é€çš„æ•°æ®é‡ï¼ˆå•ä½ï¼šFPSï¼‰";
+    const string aboutFrameRend = "è¯¥æ•°å€¼è¡¨ç¤ºåœ¨ä¸€ç§’å†…ç»˜åˆ¶åœ¨ RawImage ä¸Šçš„å¸§æ•°ï¼ˆå•ä½ï¼šFPSï¼‰";
+    const string aboutFrameDrop = "è¯¥æ•°å€¼è¡¨ç¤ºåœ¨ä¸€ç§’å†…å› ä¸ºç¼“å­˜é˜Ÿåˆ—æ»¡è€Œä¸¢å¼ƒçš„å¸§æ•°ï¼ˆå•ä½ï¼šFPSï¼‰";
+    const string aboutfoldheader = "å‹æƒ…æç¤ºï¼šå±•ç¤ºé‡Œé¢çš„å†…å®¹ä¼šå¯¼è‡´ Game çª—å£æ‰å¸§ï¼Œè¯·ä¿æŒæŠ˜å ";
     #endregion
 }

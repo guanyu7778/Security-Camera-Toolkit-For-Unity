@@ -42,7 +42,7 @@ public class ApriltagProcess : MonoBehaviour
     public float rotationLerp = 0.25f;
     [Tooltip("渲染摄像机（为空就用 Camera.main）")]
     public Camera targetCamera;
-     [Tooltip("摄像机标定文件")]
+    [Tooltip("摄像机标定文件")]
     public string cameraCalibFile = "camera_calib.json";
 
     AprilTag.TagDetector _detector;
@@ -214,14 +214,7 @@ public class ApriltagProcess : MonoBehaviour
             _cubes.Remove(id);
     }
 
-    /// <summary>
-    /// 已知 tag 在相机坐标系下的位姿 (tagPosCam, tagRotCam),
-    /// 反算得到相机在 tag 坐标系下的位姿 (camPosInTag, camRotInTag).
-    /// 数学：X_tag = R_tc * X_cam + p_tc
-    ///  =>  X_cam = R_ct * X_tag + p_ct, 其中 R_ct = R_tc^T, p_ct = -R_tc^T * p_tc
-    /// 在 Unity 中：R_ct = Inverse(tagRotCam), p_ct = -(R_ct * tagPosCam)
-    /// </summary>
-    public static void GetCameraPoseInTagFrame(
+    public void GetCameraPoseInTagFrame(
         Vector3 tagPosCam, Quaternion tagRotCam,
         out Vector3 camPosInTag, out Quaternion camRotInTag)
     {
@@ -229,7 +222,7 @@ public class ApriltagProcess : MonoBehaviour
         camPosInTag = -(camRotInTag * tagPosCam);
     }
 
-    public static void SaveCameraPose(Vector3 pos, Quaternion rot, string fileName = "camera_pose.json")
+    public void SaveCameraPose(Vector3 pos, Quaternion rot, string fileName = "camera_pose.json")
     {
         var data = new CameraPoseData
         {
@@ -266,25 +259,13 @@ public class ApriltagProcess : MonoBehaviour
         Debug.Log($"[LoadCameraPose] Loaded from {path}");
         return true;
     }
-    
-    /// <summary>
-    /// 从 StreamingAssets/配置文件 读取投影参数并应用到目标摄像机。
-    /// 优先：unity_projection_matrix；否则用 camera_matrix + image_size 构建近似投影。
-    /// 同时计算（或读取）横/竖 FOV（度）。
-    /// </summary>
-    /// <param name="targetCam">要设置的目标摄像机</param>
-    /// <param name="fileName">配置文件名（位于 StreamingAssets）</param>
-    /// <param name="near">投影近裁剪面</param>
-    /// <param name="far">投影远裁剪面</param>
-    /// <param name="hFovDeg">输出：横向 FOV（度）</param>
-    /// <param name="vFovDeg">输出：纵向 FOV（度）</param>
-    /// <returns>成功/失败</returns>
+
     public bool ApplyProjectionFromConfig(
         Camera targetCam,
         out float hFovDeg,
         out float vFovDeg,
         float near = 0.01f,
-        float far  = 1000f,
+        float far = 1000f,
         string fileName = "camera_calib.json")
     {
         hFovDeg = vFovDeg = 0f;
@@ -309,7 +290,7 @@ public class ApriltagProcess : MonoBehaviour
                 vFovDeg = (float?)summary["vertical_fov_deg"] ?? 0f;
             }
 
-            targetCam.fieldOfView = vFovDeg; 
+            targetCam.fieldOfView = vFovDeg;
 
             Debug.Log($"[ApplyProjectionFromConfig] Done. hFOV={hFovDeg:F2}°, vFOV={vFovDeg:F2}°");
             return true;
@@ -321,61 +302,21 @@ public class ApriltagProcess : MonoBehaviour
         }
     }
 
-    private static Matrix4x4 ReadMatrix4x4(JArray arr4x4)
+    public void StartAprilTagDetection()
     {
-        // arr4x4: 4 行，每行 4 列
-        Matrix4x4 m = new Matrix4x4();
-        for (int r = 0; r < 4; r++)
+        if (videoRenderer != null)
         {
-            var row = (JArray)arr4x4[r];
-            for (int c = 0; c < 4; c++)
-                m[r, c] = (float)row[c];
+            videoRenderer.EnableReadback = true;
         }
-        return m;
     }
 
-    /// <summary>
-    /// 由内参（fx, fy, cx, cy）与图像尺寸构建 Unity 投影矩阵。
-    /// 适配 Unity 左手裁剪空间（z: -near..-far），与 Camera.projectionMatrix 兼容。
-    /// </summary>
-    private static Matrix4x4 BuildUnityProjectionFromIntrinsics(
-        float fx, float fy, float cx, float cy,
-        int width, int height,
-        float near, float far)
+    public void StopAprilTagDetection()
     {
-        // 归一化视口边界（NDC 左右上下），来源：把像素坐标映射到相机归一化平面再到裁剪空间
-        float x0 = -cx / fx;
-        float x1 = (width - cx) / fx;
-        float y0 = -(height - cy) / fy; // 注意 Unity 屏幕 y 方向与相机坐标的对应
-        float y1 = cy / fy;
-
-        float left   = near * x0;
-        float right  = near * x1;
-        float bottom = near * y0;
-        float top    = near * y1;
-
-        Matrix4x4 m = new Matrix4x4();
-        m[0,0] = 2f * near / (right - left);
-        m[0,1] = 0f;
-        m[0,2] = (right + left) / (right - left);
-        m[0,3] = 0f;
-
-        m[1,0] = 0f;
-        m[1,1] = 2f * near / (top - bottom);
-        m[1,2] = (top + bottom) / (top - bottom);
-        m[1,3] = 0f;
-
-        m[2,0] = 0f;
-        m[2,1] = 0f;
-        m[2,2] = -(far + near) / (far - near);
-        m[2,3] = -(2f * far * near) / (far - near);
-
-        m[3,0] = 0f;
-        m[3,1] = 0f;
-        m[3,2] = -1f;
-        m[3,3] = 0f;
-
-        return m;
+        if (videoRenderer != null)
+        {
+            videoRenderer.EnableReadback = false;
+        }
+        RemoveStaleCubes();
     }
 }
 

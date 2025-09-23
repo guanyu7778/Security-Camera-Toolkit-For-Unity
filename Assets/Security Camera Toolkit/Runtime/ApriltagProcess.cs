@@ -70,6 +70,7 @@ public class ApriltagProcess : MonoBehaviour
             targetCamera = Camera.main;
         ApplyProjectionFromConfig(targetCamera, out var fovH, out var fovV, 0.01f, 100f, cameraCalibFile);
         this.fov = fovV;
+        videoRenderer.OnFrameDataReady += OnFrameDataReady;
     }
 
     void OnDestroy()
@@ -88,10 +89,10 @@ public class ApriltagProcess : MonoBehaviour
         _cubes.Clear();
     }
 
-    void Update()
+    void OnFrameDataReady(Color32[] rgba, int w, int h)
     {
         // 1) 取帧
-        ReadOnlySpan<Color32> span = videoRenderer._provider.GetLatestColor32Span(out int w, out int h);
+        ReadOnlySpan<Color32> span = rgba.AsSpan();
         if (span.IsEmpty)
         {
             // 没有帧就顺便做一下超时清理
@@ -105,13 +106,6 @@ public class ApriltagProcess : MonoBehaviour
             RemoveStaleCubes();
             return;
         }
-
-        if (debugVideo && rawImage != null)
-        {
-            var tex = videoRenderer._provider.GetLatestTexture2D();
-            if (tex != null) rawImage.texture = tex;
-        }
-
         // 2) 检测帧（注意：第二个参数是垂直 FOV 的弧度，第三个是 tag 物理尺寸（米））
         _detector.ProcessImage(span, fov * Mathf.Deg2Rad, tagSizeMeters);
 
@@ -315,70 +309,7 @@ public class ApriltagProcess : MonoBehaviour
                 vFovDeg = (float?)summary["vertical_fov_deg"] ?? 0f;
             }
 
-            // 2) 读取 image_size（用于 FOV 计算与投影构建）
-            int imgW = 0, imgH = 0;
-            var imageSize = root["image_size"] as JArray;
-            if (imageSize != null && imageSize.Count >= 2)
-            {
-                imgW = (int)imageSize[0];
-                imgH = (int)imageSize[1];
-            }
-
-            // 3) 若存在 unity_projection_matrix，优先直接应用
-            var upm = root["unity_projection_matrix"] as JArray;
-            if (upm != null && upm.Count == 4 && upm[0] is JArray && upm[1] is JArray && upm[2] is JArray && upm[3] is JArray)
-            {
-                Matrix4x4 P = ReadMatrix4x4(upm);
-                targetCam.projectionMatrix = P;
-            }
-            else
-            {
-                // 4) 否则用 camera_matrix + image_size 构建投影
-                //    OpenCV 相机内参：fx, fy, cx, cy
-                var K = root["camera_matrix"] as JArray;
-                if (K == null || K.Count != 3 || !(K[0] is JArray) || !(K[1] is JArray))
-                {
-                    Debug.LogError("[ApplyProjectionFromConfig] camera_matrix missing or invalid.");
-                    return false;
-                }
-
-                double fx = (double)K[0][0];
-                double fy = (double)K[1][1];
-                double cx = (double)K[0][2];
-                double cy = (double)K[1][2];
-
-                if (imgW <= 0 || imgH <= 0)
-                {
-                    Debug.LogWarning("[ApplyProjectionFromConfig] image_size missing; fallback to targetCam pixelRect.");
-                    imgW = (int)targetCam.pixelWidth;
-                    imgH = (int)targetCam.pixelHeight;
-                }
-
-                // 构建 Unity 的投影矩阵（右手摄像机 → 左手裁剪空间）
-                // 参考：把 OpenCV pinhole 内参转成 NDC（0..1）再映射到 Unity 的裁剪空间。
-                targetCam.projectionMatrix = BuildUnityProjectionFromIntrinsics((float)fx, (float)fy, (float)cx, (float)cy, imgW, imgH, near, far);
-            }
-
-            // 5) 若 FOV 没读到，则根据内参计算
-            if (hFovDeg <= 0f || vFovDeg <= 0f)
-            {
-                // 需要 fx, fy；尽量从 camera_matrix 取
-                var K2 = root["camera_matrix"] as JArray;
-                if (K2 != null && K2.Count == 3 && K2[0] is JArray && K2[1] is JArray && imgW > 0 && imgH > 0)
-                {
-                    double fx = (double)K2[0][0];
-                    double fy = (double)K2[1][1];
-
-                    // hfov = 2 * atan( w / (2*fx) ), vfov = 2 * atan( h / (2*fy) )
-                    hFovDeg = Mathf.Rad2Deg * (2f * Mathf.Atan((float)imgW / (2f * (float)fx)));
-                    vFovDeg = Mathf.Rad2Deg * (2f * Mathf.Atan((float)imgH / (2f * (float)fy)));
-                }
-            }
-
-            // （可选）把 Unity 的 vertical FOV 同步写回，方便你的其他逻辑使用
-            // 注意：当你手动设置 projectionMatrix 时，Camera.fieldOfView 的值不会自动更新，也不会真正被用到。
-            // 这里只是为了“读取/展示”方便。
-            if (vFovDeg > 0f) targetCam.fieldOfView = vFovDeg;
+            targetCam.fieldOfView = vFovDeg; 
 
             Debug.Log($"[ApplyProjectionFromConfig] Done. hFOV={hFovDeg:F2}°, vFOV={vFovDeg:F2}°");
             return true;

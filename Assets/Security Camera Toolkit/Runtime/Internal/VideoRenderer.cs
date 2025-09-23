@@ -66,7 +66,8 @@ namespace zFramework.Media
         [Header("AprilTag Readback")]
         public bool EnableReadback = true;
         [Range(1, 8)] public int ReadbackEveryNFrames = 1;
-        public event Action<byte[], int, int> OnGrayFrameReady; // 回调给 AprilTag
+        public event Action<Color32[], int, int> OnFrameDataReady; // 回调给 AprilTag
+        private Color32[] _rgbaCache;
 
         // Shader属性名（若你的shader属性名不同，可以改这里）
         readonly int ID_YTex = Shader.PropertyToID("_YTex");
@@ -173,8 +174,6 @@ namespace zFramework.Media
 
         private void TryProcessI422VideoFrame()
         {
-            Debug.Log($"Y:{_textureY?.width}x{_textureY?.height}, U:{_textureU?.width}x{_textureU?.height}, V:{_textureV?.width}x{_textureV?.height}");
-
             // 控帧率（保留你的逻辑）
             if (preFrameRate != framerate)
             {
@@ -329,25 +328,21 @@ namespace zFramework.Media
         void OnReadback(AsyncGPUReadbackRequest req)
         {
             if (req.hasError) { Debug.LogWarning("GPU readback error"); return; }
+            if (OutputRT == null) return;
 
-            var data = req.GetData<Color32>();
-            int n = data.Length;
-            int w = OutputRT ? OutputRT.width : 0;
-            int h = OutputRT ? OutputRT.height : 0;
-            if (n != w * h || w == 0) return;
+            int w = OutputRT.width;
+            int h = OutputRT.height;
 
-            // 转灰度（0.299R + 0.587G + 0.114B）
-            byte[] gray = new byte[n];
-            for (int i = 0; i < n; i++)
-            {
-                var c = data[i];
-                int g = (int)(0.299f * c.r + 0.587f * c.g + 0.114f * c.b + 0.5f);
-                if (g < 0) g = 0; else if (g > 255) g = 255;
-                gray[i] = (byte)g;
-            }
+            // 1) GPU→CPU：RGBA32 像素
+            var nat = req.GetData<Color32>();
+            if (nat.Length != w * h) return;
+            if (_rgbaCache == null || _rgbaCache.Length != nat.Length)
+            _rgbaCache = new Color32[nat.Length];
+            nat.CopyTo(_rgbaCache);
 
-            OnGrayFrameReady?.Invoke(gray, w, h);
+            OnFrameDataReady?.Invoke(_rgbaCache, w, h);
         }
+
 
         // 仅极端回退用，不建议：会 stall
         Texture2D _tmpCpuTex;

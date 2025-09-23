@@ -297,7 +297,7 @@ MonoBehaviour:
   FlipY: 1
   UseFullRange: 1
   UseBt709: 0
-  EnableReadback: 0
+  EnableReadback: 1
   ReadbackEveryNFrames: 2
   attr_y: _YTexture
   attr_u: _UTexture
@@ -533,7 +533,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1173688526
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -738,7 +738,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1479254047
 Transform:
   m_ObjectHideFlags: 0
@@ -1156,7 +1156,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6080619211317756629}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 861aea7ba8fdb8e46a1c988666a56046, type: 3}
   m_Name: 
@@ -1165,7 +1165,7 @@ MonoBehaviour:
   rawImage: {fileID: 547860956}
   debugVideo: 0
   fov: 35.235718
-  tagSizeMeters: 0.105
+  tagSizeMeters: 0.1
   cubeSizeMeters: 0.2
   cubeMat: {fileID: 2100000, guid: 781021a5047c1944791fa7327af1ede8, type: 2}
   staleFramesToRemove: 20

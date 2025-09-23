@@ -47,6 +47,8 @@ public class ApriltagProcess : MonoBehaviour
 
     AprilTag.TagDetector _detector;
 
+    public System.Action<CameraPoseData> OnCameraPoseEstimated;
+
     // 每个 Tag 的可视化对象与其状态
     class TagCube
     {
@@ -58,6 +60,8 @@ public class ApriltagProcess : MonoBehaviour
 
     readonly Dictionary<int, TagCube> _cubes = new();
     Transform _container; // 作为所有 Cube 的父物体，便于管理
+
+    public CameraPoseData cameraPoseData;
 
     void Start()
     {
@@ -122,6 +126,17 @@ public class ApriltagProcess : MonoBehaviour
 
             UpdateCubePose(tc, tag.Position, tag.Rotation);
             tc.lastSeenFrame = Time.frameCount;
+            if(tag.ID == 0)
+            {
+                // 估计相机位姿
+                GetCameraPoseInTagFrame(tag.Position, tag.Rotation, out var camPos, out var camRot);
+                cameraPoseData = new CameraPoseData
+                {
+                    position = new float[] { camPos.x, camPos.y, camPos.z },
+                    rotation = new float[] { camRot.x, camRot.y, camRot.z, camRot.w }
+                };
+                OnCameraPoseEstimated?.Invoke(cameraPoseData);
+            }
         }
 
         // 4) 清理长时间未看到的 Tag

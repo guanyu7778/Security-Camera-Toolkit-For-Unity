@@ -126,7 +126,7 @@ public class ApriltagProcess : MonoBehaviour
 
             UpdateCubePose(tc, tag.Position, tag.Rotation);
             tc.lastSeenFrame = Time.frameCount;
-            if(tag.ID == 0)
+            if (tag.ID == 0)
             {
                 // 估计相机位姿
                 GetCameraPoseInTagFrame(tag.Position, tag.Rotation, out var camPos, out var camRot);
@@ -229,6 +229,19 @@ public class ApriltagProcess : MonoBehaviour
             _cubes.Remove(id);
     }
 
+    public void RemoveAllCubes()
+    {
+        foreach (var kv in _cubes)
+        {
+            var tc = kv.Value;
+            if (tc != null && tc.go != null)
+            {
+                Destroy(tc.go);
+            }
+        }
+        _cubes.Clear();
+    }
+
     public void GetCameraPoseInTagFrame(
         Vector3 tagPosCam, Quaternion tagRotCam,
         out Vector3 camPosInTag, out Quaternion camRotInTag)
@@ -270,7 +283,7 @@ public class ApriltagProcess : MonoBehaviour
 
         pos = new Vector3(data.position[0], data.position[1], data.position[2]);
         rot = new Quaternion(data.rotation[0], data.rotation[1], data.rotation[2], data.rotation[3]);
-
+        cameraPoseData = data;
         Debug.Log($"[LoadCameraPose] Loaded from {path}");
         return true;
     }
@@ -332,6 +345,29 @@ public class ApriltagProcess : MonoBehaviour
             videoRenderer.EnableReadback = false;
         }
         RemoveStaleCubes();
+    }
+
+    //通过tagid获取对应的cube，如果最后更新时间在阈值之内，就返回对应的camerapos
+    public bool TryGetTagCubeCameraPose(int tagId, out Vector3 camPos, out Quaternion camRot)
+    {
+        camPos = Vector3.zero;
+        camRot = Quaternion.identity;
+
+        if (cameraPoseData == null)
+        {
+            return false;
+        }
+
+        if (_cubes.TryGetValue(tagId, out var tc))
+        {
+            if (Time.frameCount - tc.lastSeenFrame <= staleFramesToRemove)
+            {
+                camPos = new Vector3(cameraPoseData.position[0], cameraPoseData.position[1], cameraPoseData.position[2]);
+                camRot = new Quaternion(cameraPoseData.rotation[0], cameraPoseData.rotation[1], cameraPoseData.rotation[2], cameraPoseData.rotation[3]);
+                return true;
+            }
+        }
+        return false;
     }
 }
 

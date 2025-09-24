@@ -185,6 +185,7 @@ MonoBehaviour:
   apriltagProcess: {fileID: 6080619211317756633}
   videoRenderer: {fileID: 229913991}
   targetCamera: {fileID: 1173688528}
+  info: {fileID: 476794759}
 --- !u!1 &180240061
 GameObject:
   m_ObjectHideFlags: 0
@@ -1404,7 +1405,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 446.03, y: 0}
+  m_AnchoredPosition: {x: 446.03003, y: 0}
   m_SizeDelta: {x: 160, y: 60}
   m_Pivot: {x: 0, y: 0.5}
 --- !u!114 &1843097944
@@ -1450,7 +1451,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1843097945}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 152327597}
+        m_TargetAssemblyTypeName: MRCompositor, zFramework.Media.Runtime
+        m_MethodName: Save
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &1843097945
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1571,7 +1584,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1985994700}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 152327597}
+        m_TargetAssemblyTypeName: MRCompositor, zFramework.Media.Runtime
+        m_MethodName: StartBD
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &1985994700
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1863,7 +1888,7 @@ MonoBehaviour:
   tagSizeMeters: 0.1
   cubeSizeMeters: 0.2
   cubeMat: {fileID: 2100000, guid: 781021a5047c1944791fa7327af1ede8, type: 2}
-  staleFramesToRemove: 20
+  staleFramesToRemove: 5
   smooth: 0
   positionSmoothTime: 0.05
   rotationLerp: 0.25

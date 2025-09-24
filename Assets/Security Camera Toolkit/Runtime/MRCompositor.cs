@@ -30,10 +30,6 @@ public class MRCompositor : MonoBehaviour
     void Start()
     {
         StartCoroutine(Init());
-        apriltagProcess.OnCameraPoseEstimated += (pose) =>
-        {
-            cameraPoseData = pose;
-        };
     }
 
     IEnumerator Init()
@@ -55,24 +51,37 @@ public class MRCompositor : MonoBehaviour
         info.text = "标定完成";
         Debug.Log($"[MRCompositor] Camera pose loaded from file: pos={pos}, rot={rot.eulerAngles}");
     }
+    
 
-    public void Save()
+    //通过TryGetTagCubeCameraPose获取位姿
+    public void Save()  
     {
-        if (cameraPoseData != null)
+        if (apriltagProcess.TryGetTagCubeCameraPose(0, out Vector3 pos, out Quaternion rot))
         {
-            apriltagProcess.SaveCameraPose(new Vector3(cameraPoseData.position[0], cameraPoseData.position[1], cameraPoseData.position[2]),
-                new Quaternion(cameraPoseData.rotation[0], cameraPoseData.rotation[1], cameraPoseData.rotation[2], cameraPoseData.rotation[3]));
-            Debug.Log("[MRCompositor] Camera pose saved.");
+            cameraPoseData = new CameraPoseData
+            {
+                position = new float[] { pos.x, pos.y, pos.z },
+                rotation = new float[] { rot.x, rot.y, rot.z, rot.w }
+            };
+            apriltagProcess.SaveCameraPose(pos, rot);
+            info.text = "标定OK";
             apriltagProcess.StopAprilTagDetection();
+            //把camera设置为正确位姿
+            targetCamera.transform.SetPositionAndRotation(pos, rot);
+            apriltagProcess.RemoveAllCubes();
+            Debug.Log($"[MRCompositor] Camera pose saved to file: pos={pos}, rot={rot.eulerAngles}");
         }
         else
         {
-            Debug.LogWarning("[MRCompositor] No camera pose data to save.");
+            info.text = "无标定";
+            Debug.LogWarning("[MRCompositor] No valid tag cube detected. Cannot save camera pose.");
         }
     }
 
     public void StartBD()
-    { 
+    {
         apriltagProcess.StartAprilTagDetection();
+        //临时把camera设置为000
+        targetCamera.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
     } 
 }

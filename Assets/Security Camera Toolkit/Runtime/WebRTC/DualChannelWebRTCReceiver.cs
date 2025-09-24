@@ -38,12 +38,32 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         {
             _config = new RTCConfiguration
             {
-                iceServers = new[] { new RTCIceServer { urls = iceServerUrls } }
+                iceServers = BuildIceServers(iceServerUrls)
             };
+        }
+
+        static RTCIceServer[] BuildIceServers(string[] urls)
+        {
+            if (urls == null || urls.Length == 0)
+                return Array.Empty<RTCIceServer>();
+
+            var valid = new System.Collections.Generic.List<string>();
+            foreach (var url in urls)
+            {
+                if (string.IsNullOrWhiteSpace(url))
+                    continue;
+                valid.Add(url.Trim());
+            }
+
+            if (valid.Count == 0)
+                return Array.Empty<RTCIceServer>();
+
+            return new[] { new RTCIceServer { urls = valid.ToArray() } };
         }
 
         void OnEnable()
         {
+            LogVerbose("Receiver enabled");
             WebRTCUpdatePump.Instance.Retain();
             if (autoStartServer)
             {
@@ -53,6 +73,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
         void OnDisable()
         {
+            LogVerbose("Receiver disabled");
             StopServer();
             WebRTCUpdatePump.Instance.Release();
         }
@@ -61,8 +82,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         {
             if (_wsServer != null)
             {
-                if (verboseLogging)
-                    Debug.Log("[DualChannelWebRTCReceiver] Signaling server already running.", this);
+                LogVerbose("Signaling server already running");
                 return;
             }
 
@@ -71,10 +91,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 _wsServer = new WebSocketServer(IPAddress.Any, signalingPort);
                 _wsServer.AddWebSocketService(signalingPath, () => new ReceiverBehavior(this));
                 _wsServer.Start();
-                if (verboseLogging)
-                {
-                    Debug.Log($"[DualChannelWebRTCReceiver] Signaling server listening on ws://0.0.0.0:{signalingPort}{signalingPath}", this);
-                }
+                LogVerbose($"Signaling server listening on ws://0.0.0.0:{signalingPort}{signalingPath}");
             }
             catch (Exception ex)
             {
@@ -94,8 +111,10 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             if (_wsServer != null)
             {
-                try { _wsServer.Stop(); } catch { }
+                try { _wsServer.Stop(); }
+                catch { }
                 _wsServer = null;
+                LogVerbose("Signaling server stopped");
             }
         }
 
@@ -118,10 +137,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             if (message == null)
                 return;
 
-            if (verboseLogging)
-            {
-                Debug.Log($"[DualChannelWebRTCReceiver] <- {message.type} (client {clientId})", this);
-            }
+            LogVerbose($"<- {clientId}: {message.type}");
 
             switch (message.type)
             {
@@ -141,10 +157,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
         internal void HandleClientClosed(string clientId)
         {
-            if (verboseLogging)
-            {
-                Debug.Log($"[DualChannelWebRTCReceiver] Client disconnected: {clientId}", this);
-            }
+            LogVerbose($"Client disconnected: {clientId}");
             RemovePeer(clientId);
         }
 
@@ -155,6 +168,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
         IEnumerator HandleOffer(string clientId, ReceiverBehavior behavior, string sdp)
         {
+            LogVerbose($"Processing offer from {clientId}");
             var ctx = GetOrCreateContext(clientId, behavior);
             if (ctx.peer != null)
             {
@@ -166,10 +180,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             ctx.peer.OnTrack = e => HandleTrack(ctx, e);
             ctx.peer.OnConnectionStateChange = state =>
             {
-                if (verboseLogging)
-                {
-                    Debug.Log($"[DualChannelWebRTCReceiver] Peer {clientId} state: {state}", this);
-                }
+                LogVerbose($"Peer {clientId} connection state: {state}");
                 if (state == RTCPeerConnectionState.Failed || state == RTCPeerConnectionState.Disconnected)
                 {
                     RemovePeer(clientId);
@@ -186,6 +197,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 yield break;
             }
 
+            LogVerbose($"Creating answer for {clientId}");
             var answerOp = ctx.peer.CreateAnswer();
             yield return answerOp;
             if (answerOp.IsError)
@@ -205,18 +217,17 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 yield break;
             }
 
+            LogVerbose($"-> {clientId}: answer");
             var message = SignalingMessage.CreateAnswer(answerDesc.sdp);
             behavior.SendJson(message.ToJson());
-            if (verboseLogging)
-            {
-                Debug.Log($"[DualChannelWebRTCReceiver] -> answer (client {clientId})", this);
-            }
         }
 
         void HandleTrack(PeerContext ctx, RTCTrackEvent e)
         {
             if (e.Track is not VideoStreamTrack videoTrack)
                 return;
+
+            LogVerbose($"Peer {ctx.id} received track kind={videoTrack.Kind} texture={(videoTrack.Texture ? videoTrack.Texture.width + "x" + videoTrack.Texture.height : "null")}");
 
             if (ctx.colorTrack == null)
             {
@@ -235,26 +246,37 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 ctx.alphaTexture = videoTrack.Texture;
                 ApplyTexturesToUI(ctx);
             }
+            else
+            {
+                LogVerbose($"Peer {ctx.id} received extra track (ignored)");
+            }
         }
 
         void PromoteActivePeer(PeerContext ctx)
         {
             _activePeer = ctx;
-            if (verboseLogging)
-            {
-                Debug.Log($"[DualChannelWebRTCReceiver] Active peer set to {ctx.id}", this);
-            }
+            LogVerbose($"Active peer set to {ctx.id}");
         }
 
         void OnColorFrame(PeerContext ctx, Texture tex)
         {
             ctx.colorTexture = tex;
+            if (!ctx.loggedFirstColorFrame)
+            {
+                LogVerbose($"First color frame from {ctx.id}: {(tex ? tex.width + "x" + tex.height : "null")}");
+                ctx.loggedFirstColorFrame = true;
+            }
             ApplyTexturesToUI(ctx);
         }
 
         void OnAlphaFrame(PeerContext ctx, Texture tex)
         {
             ctx.alphaTexture = tex;
+            if (!ctx.loggedFirstAlphaFrame)
+            {
+                LogVerbose($"First alpha frame from {ctx.id}: {(tex ? tex.width + "x" + tex.height : "null")}");
+                ctx.loggedFirstAlphaFrame = true;
+            }
             ApplyTexturesToUI(ctx);
         }
 
@@ -290,10 +312,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 return;
 
             ctx.behavior?.SendJson(message.ToJson());
-            if (verboseLogging)
-            {
-                Debug.Log($"[DualChannelWebRTCReceiver] -> ice (client {ctx.id})", this);
-            }
+            LogVerbose($"-> {ctx.id}: ice candidate (len={message.candidate.candidate?.Length ?? 0})");
         }
 
         void ApplyRemoteIce(PeerContext ctx, SignalingMessage.IceCandidatePayload payload)
@@ -305,8 +324,9 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             {
                 using var candidate = payload.ToCandidate();
                 bool added = ctx.peer.AddIceCandidate(candidate);
-                if (!added && verboseLogging)
-                    Debug.LogWarning($"[DualChannelWebRTCReceiver] Failed to add ICE candidate for {ctx.id}", this);
+                LogVerbose(added
+                    ? $"Applied ICE candidate from {ctx.id}"
+                    : $"Failed to apply ICE candidate from {ctx.id}");
             }
             catch (Exception ex)
             {
@@ -328,6 +348,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 behavior = behavior
             };
             _peers[clientId] = ctx;
+            LogVerbose($"Created context for peer {clientId}");
             return ctx;
         }
 
@@ -335,6 +356,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         {
             if (_peers.TryGetValue(clientId, out var ctx))
             {
+                LogVerbose($"Removing peer {clientId}");
                 CleanupPeer(ctx);
                 _peers.Remove(clientId);
             }
@@ -363,6 +385,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             ctx.alphaTrack = null;
             ctx.colorTexture = null;
             ctx.alphaTexture = null;
+            ctx.loggedFirstAlphaFrame = false;
+            ctx.loggedFirstColorFrame = false;
 
             if (_activePeer == ctx)
             {
@@ -387,8 +411,10 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             public VideoStreamTrack alphaTrack;
             public Texture colorTexture;
             public Texture alphaTexture;
-            public OnVideoReceived  colorHandler;
-            public OnVideoReceived  alphaHandler;
+            public Unity.WebRTC.OnVideoReceived colorHandler;
+            public Unity.WebRTC.OnVideoReceived alphaHandler;
+            public bool loggedFirstColorFrame;
+            public bool loggedFirstAlphaFrame;
         }
 
         public class ReceiverBehavior : WebSocketBehavior
@@ -403,7 +429,10 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             protected override void OnMessage(MessageEventArgs e)
             {
                 if (!e.IsText)
+                {
+                    _owner.LogVerbose("Ignored non-text WS frame from client");
                     return;
+                }
                 UnityMainThreadDispatcher.Enqueue(() => _owner.HandleClientMessage(ID, this, e.Data));
             }
 
@@ -422,6 +451,14 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 if (string.IsNullOrEmpty(json))
                     return;
                 Send(json);
+            }
+        }
+
+        void LogVerbose(string message)
+        {
+            if (verboseLogging)
+            {
+                Debug.Log($"[DualChannelWebRTCReceiver] {message}", this);
             }
         }
     }

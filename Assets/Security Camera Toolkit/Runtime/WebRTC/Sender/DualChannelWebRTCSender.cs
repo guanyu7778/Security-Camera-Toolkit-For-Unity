@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using Unity.WebRTC;
 using UnityEngine;
@@ -39,6 +39,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         bool _ownsColorRT;
         Material _extractAlphaMaterial;
         bool _missingExtractShaderLogged;
+        bool _alphaBlitLogged;
+        bool _previewLogged;
 
         RTCPeerConnection _peer;
         VideoStreamTrack _colorTrack;
@@ -53,17 +55,36 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
         void Awake()
         {
+            Unity.WebRTC.WebRTC.ConfigureNativeLogging(true, Unity.WebRTC.NativeLoggingSeverity.Info);
             _config = new RTCConfiguration
             {
-                iceServers = new[]
-                {
-                    new RTCIceServer { urls = iceServerUrls }
-                }
+                iceServers = BuildIceServers(iceServerUrls)
             };
+        }
+
+        static RTCIceServer[] BuildIceServers(string[] urls)
+        {
+            if (urls == null || urls.Length == 0)
+                return Array.Empty<RTCIceServer>();
+
+            var valid = new System.Collections.Generic.List<string>();
+            foreach (var url in urls)
+            {
+                if (string.IsNullOrWhiteSpace(url))
+                    continue;
+                valid.Add(url.Trim());
+            }
+
+            if (valid.Count == 0)
+                return Array.Empty<RTCIceServer>();
+
+            return new[] { new RTCIceServer { urls = valid.ToArray() } };
         }
 
         void OnEnable()
         {
+            LogVerbose($"OnEnable: sourceTexture={(sourceTexture ? sourceTexture.width + "x" + sourceTexture.height : "null")}, autoAlloc={allocateSourceTextureIfMissing}");
+
             WebRTCUpdatePump.Instance.Retain();
             HookSignaler(true);
             EnsureRenderTargets();
@@ -72,17 +93,20 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             if (autoConnectSignaler && signaler != null && !signaler.Connected)
             {
+                LogVerbose("Auto-connecting signaler");
                 signaler.Connect();
             }
 
             if (autoStartWhenConnected && signaler != null && signaler.Connected)
             {
+                LogVerbose("Auto-starting streaming because signaler already connected");
                 StartStreaming();
             }
         }
 
         void OnDisable()
         {
+            LogVerbose("OnDisable");
             StopStreamingInternal(sendBye: false);
             HookSignaler(false);
             WebRTCUpdatePump.Instance.Release();
@@ -90,6 +114,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
         void OnDestroy()
         {
+            LogVerbose("OnDestroy: releasing render targets");
             ReleaseRenderTargets();
             DisposeExtractMaterial();
         }
@@ -101,6 +126,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             if (_alphaRT == null || _alphaRT.width != _colorRT.width || _alphaRT.height != _colorRT.height)
             {
+                LogVerbose("LateUpdate detected alpha RT mismatch. Recreating.");
                 EnsureAlphaTexture();
             }
 
@@ -111,6 +137,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         public void SetSourceTexture(RenderTexture texture)
         {
             sourceTexture = texture;
+            LogVerbose($"SetSourceTexture: {(texture ? texture.width + "x" + texture.height : "null")}");
             EnsureRenderTargets();
             UpdateAlphaTextureIfNeeded();
             UpdatePreview();
@@ -124,12 +151,35 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             if (on && !_signalerHooked)
             {
                 signaler.OnJson += OnSignalerMessage;
+                signaler.OnConnected += HandleSignalerConnected;
+                signaler.OnDisconnected += HandleSignalerDisconnected;
                 _signalerHooked = true;
+                LogVerbose("Subscribed to signaler events");
             }
             else if (!on && _signalerHooked)
             {
                 signaler.OnJson -= OnSignalerMessage;
+                signaler.OnConnected -= HandleSignalerConnected;
+                signaler.OnDisconnected -= HandleSignalerDisconnected;
                 _signalerHooked = false;
+                LogVerbose("Unsubscribed from signaler events");
+            }
+        }
+        void HandleSignalerConnected()
+        {
+            LogVerbose("Signaler connected event");
+            if (autoStartWhenConnected && !_isStreaming)
+            {
+                StartStreaming();
+            }
+        }
+
+        void HandleSignalerDisconnected()
+        {
+            LogVerbose("Signaler disconnected event");
+            if (_isStreaming)
+            {
+                StopStreamingInternal(sendBye: false);
             }
         }
 
@@ -145,25 +195,29 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                     _ownsColorRT = false;
                 }
                 _colorRT = sourceTexture;
+                LogVerbose($"Using provided source texture {_colorRT.width}x{_colorRT.height}");
             }
             else if (_colorRT == null)
             {
                 if (!allocateSourceTextureIfMissing)
                 {
-                    if (verboseLogging)
-                        Debug.LogWarning("[DualChannelWebRTCSender] Source texture not assigned.", this);
+                    Debug.LogWarning("[DualChannelWebRTCSender] Source texture not assigned.", this);
                     return;
                 }
 
                 _colorRT = CreateColorRenderTexture(streamWidth, streamHeight);
                 _ownsColorRT = true;
+                LogVerbose($"Allocated fallback source texture {_colorRT.width}x{_colorRT.height}");
             }
 
             if (_colorRT == null)
                 return;
 
             if (!_colorRT.IsCreated())
+            {
                 _colorRT.Create();
+                LogVerbose("Ensured color RT is created");
+            }
 
             EnsureAlphaTexture();
             EnsureExtractMaterial();
@@ -212,6 +266,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 wrapMode = TextureWrapMode.Clamp
             };
             _alphaRT.Create();
+            _alphaBlitLogged = false;
+            LogVerbose($"Created alpha RT {_alphaRT.width}x{_alphaRT.height}");
         }
 
         void EnsureExtractMaterial()
@@ -232,6 +288,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             _extractAlphaMaterial = new Material(shader);
             _missingExtractShaderLogged = false;
+            LogVerbose("Created extract-alpha material");
         }
 
         void UpdateAlphaTextureIfNeeded()
@@ -244,6 +301,11 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 return;
 
             Graphics.Blit(_colorRT, _alphaRT, _extractAlphaMaterial);
+            if (!_alphaBlitLogged)
+            {
+                LogVerbose("Alpha RT updated via ExtractAlpha shader");
+                _alphaBlitLogged = true;
+            }
         }
 
         void UpdatePreview()
@@ -262,6 +324,12 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             {
                 compositePreview.material = null;
                 compositePreview.texture = _colorRT;
+            }
+
+            if (!_previewLogged && _colorRT != null)
+            {
+                LogVerbose("Preview updated with current textures");
+                _previewLogged = true;
             }
         }
 
@@ -318,6 +386,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 return;
             }
 
+            LogVerbose($"Starting streaming with color {_colorRT.width}x{_colorRT.height} and alpha {_alphaRT.width}x{_alphaRT.height}");
             _startRoutine = StartCoroutine(BeginStreamingRoutine());
         }
 
@@ -330,6 +399,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         {
             if (autoConnectSignaler && !signaler.Connected)
             {
+                LogVerbose("Waiting for signaler connection");
                 signaler.Connect();
             }
 
@@ -354,6 +424,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 yield break;
             }
 
+            LogVerbose("Creating SDP offer");
             var offerOp = _peer.CreateOffer();
             yield return offerOp;
             if (offerOp.IsError)
@@ -365,6 +436,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             }
 
             var desc = offerOp.Desc;
+            LogVerbose("Setting local description");
             var localOp = _peer.SetLocalDescription(ref desc);
             yield return localOp;
             if (localOp.IsError)
@@ -375,6 +447,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 yield break;
             }
 
+            LogVerbose("Sending SDP offer");
             var message = SignalingMessage.CreateOffer(desc.sdp);
             signaler.SendJson(message.ToJson());
             _isStreaming = true;
@@ -395,10 +468,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             _peer.OnIceCandidate = HandleLocalIceCandidate;
             _peer.OnConnectionStateChange = state =>
             {
-                if (verboseLogging)
-                {
-                    Debug.Log($"[DualChannelWebRTCSender] Connection state: {state}", this);
-                }
+                LogVerbose($"Peer connection state: {state}");
             };
 
             _colorTrack = new VideoStreamTrack(_colorRT, CopyTextureHelper.VerticalFlipCopy);
@@ -409,6 +479,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             {
                 colorSender.SyncApplicationFramerate = true;
             }
+            LogVerbose($"Added color track {_colorRT.width}x{_colorRT.height}");
 
             _alphaTrack = new VideoStreamTrack(_alphaRT, CopyTextureHelper.VerticalFlipCopy);
             _alphaStream = new MediaStream();
@@ -418,6 +489,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             {
                 alphaSender.SyncApplicationFramerate = true;
             }
+            LogVerbose($"Added alpha track {_alphaRT.width}x{_alphaRT.height}");
         }
 
         void HandleLocalIceCandidate(RTCIceCandidate candidate)
@@ -425,6 +497,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             var message = SignalingMessage.CreateIce(candidate);
             if (message != null)
             {
+                LogVerbose($"Sending ICE candidate (len={message.candidate.candidate?.Length ?? 0})");
                 signaler?.SendJson(message.ToJson());
             }
             candidate?.Dispose();
@@ -449,6 +522,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             if (message == null)
                 return;
 
+            LogVerbose($"Received signaling message '{message.type}'");
+
             switch (message.type)
             {
                 case "answer":
@@ -470,6 +545,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             if (_peer == null)
                 yield break;
 
+            LogVerbose("Applying remote answer");
             var desc = new RTCSessionDescription { type = RTCSdpType.Answer, sdp = sdp };
             var remoteOp = _peer.SetRemoteDescription(ref desc);
             yield return remoteOp;
@@ -488,10 +564,9 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             {
                 using var candidate = payload.ToCandidate();
                 bool added = _peer.AddIceCandidate(candidate);
-                if (!added && verboseLogging)
-                {
-                    Debug.LogWarning("[DualChannelWebRTCSender] Failed to add remote ICE candidate.", this);
-                }
+                LogVerbose(added
+                    ? "Applied remote ICE candidate"
+                    : "Failed to apply remote ICE candidate");
             }
             catch (Exception ex)
             {
@@ -515,10 +590,12 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             if (sendBye && signaler != null)
             {
+                LogVerbose("Sending bye message");
                 var bye = new SignalingMessage { type = "bye" };
                 signaler.SendJson(bye.ToJson());
             }
 
+            LogVerbose("Stopping streaming and cleaning up peer");
             CleanupPeer();
             _isStreaming = false;
         }
@@ -537,10 +614,22 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             if (_peer != null)
             {
-                try { _peer.Close(); } catch { }
+                try { _peer.Close(); }
+                catch { }
                 _peer.Dispose();
                 _peer = null;
+                LogVerbose("Peer connection disposed");
+            }
+        }
+
+        void LogVerbose(string message)
+        {
+            if (verboseLogging)
+            {
+                Debug.Log($"[DualChannelWebRTCSender] {message}", this);
             }
         }
     }
 }
+
+

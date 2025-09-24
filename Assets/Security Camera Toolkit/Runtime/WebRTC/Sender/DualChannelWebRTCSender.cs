@@ -11,8 +11,10 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
     {
         const string ExtractAlphaShaderName = "Hidden/ExtractAlpha";
 
-        [Header("Source RenderTexture")]
-        [Tooltip("RGBA RenderTexture that already contains the MR composition with a valid alpha channel.")]
+        [Header("Source Capture")]
+        [Tooltip("Camera that produces the MR composition. If assigned, a RenderTexture is auto-created with the correct format.")]
+        [SerializeField] Camera sourceCamera;
+        [Tooltip("Optional pre-created RenderTexture that already contains the MR composition with a valid alpha channel.")]
         [SerializeField] RenderTexture sourceTexture;
         [Tooltip("If true and no sourceTexture is assigned, a RenderTexture will be allocated using Stream Width/Height.")]
         [SerializeField] bool allocateSourceTextureIfMissing;
@@ -185,7 +187,11 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
         void EnsureRenderTargets()
         {
-            if (sourceTexture != null)
+            if (sourceCamera != null)
+            {
+                EnsureCameraColorTarget();
+            }
+            else if (sourceTexture != null)
             {
                 if (_ownsColorRT && _colorRT != null)
                 {
@@ -207,7 +213,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
                 _colorRT = CreateColorRenderTexture(streamWidth, streamHeight);
                 _ownsColorRT = true;
-                LogVerbose($"Allocated fallback source texture {_colorRT.width}x{_colorRT.height}");
+                LogVerbose($"Allocated fallback source texture {_colorRT.width}x{_colorRT.height} ({_colorRT.format})");
             }
 
             if (_colorRT == null)
@@ -223,9 +229,46 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             EnsureExtractMaterial();
         }
 
+        void EnsureCameraColorTarget()
+        {
+            int width = Mathf.Max(64, streamWidth);
+            int height = Mathf.Max(64, streamHeight);
+            var desiredFormat = GetColorRenderTextureFormat();
+
+            bool needsNew = !_ownsColorRT
+                             || _colorRT == null
+                             || _colorRT.width != width
+                             || _colorRT.height != height
+                             || _colorRT.format != desiredFormat;
+
+            if (needsNew)
+            {
+                if (_ownsColorRT && _colorRT != null)
+                {
+                    if (sourceCamera != null && sourceCamera.targetTexture == _colorRT)
+                    {
+                        sourceCamera.targetTexture = null;
+                    }
+                    _colorRT.Release();
+                    Destroy(_colorRT);
+                }
+
+                _colorRT = CreateColorRenderTexture(width, height);
+                _ownsColorRT = true;
+                LogVerbose($"Allocated camera source texture {_colorRT.width}x{_colorRT.height} ({_colorRT.format})");
+            }
+
+            if (sourceCamera != null && sourceCamera.targetTexture != _colorRT)
+            {
+                sourceCamera.targetTexture = _colorRT;
+                LogVerbose("Assigned camera target texture");
+            }
+        }
+
         RenderTexture CreateColorRenderTexture(int width, int height)
         {
-            var rt = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32)
+            var format = GetColorRenderTextureFormat();
+            var rt = new RenderTexture(width, height, 0, format)
             {
                 name = "__WebRTC_Color__",
                 useMipMap = false,
@@ -235,6 +278,22 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             };
             rt.Create();
             return rt;
+        }
+
+        RenderTextureFormat GetColorRenderTextureFormat()
+        {
+            switch (Application.platform)
+            {
+                case RuntimePlatform.WindowsPlayer:
+                case RuntimePlatform.WindowsEditor:
+                    return RenderTextureFormat.BGRA32;
+                case RuntimePlatform.IPhonePlayer:
+                    return RenderTextureFormat.BGRA32;
+                case RuntimePlatform.Android:
+                    return RenderTextureFormat.ARGB32;
+                default:
+                    return RenderTextureFormat.ARGB32;
+            }
         }
 
         void EnsureAlphaTexture()
@@ -335,6 +394,11 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
         void ReleaseRenderTargets()
         {
+            if (sourceCamera != null && sourceCamera.targetTexture == _colorRT)
+            {
+                sourceCamera.targetTexture = null;
+            }
+
             if (_ownsColorRT && _colorRT != null)
             {
                 _colorRT.Release();

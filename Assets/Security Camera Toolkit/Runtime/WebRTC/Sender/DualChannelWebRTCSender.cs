@@ -316,7 +316,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 _alphaRT = null;
             }
 
-            _alphaRT = new RenderTexture(_colorRT.width, _colorRT.height, 0, RenderTextureFormat.ARGB32)
+            var alphaFormat = GetColorRenderTextureFormat(); // Mirror color format so WebRTC accepts the stream.
+            _alphaRT = new RenderTexture(_colorRT.width, _colorRT.height, 0, alphaFormat)
             {
                 name = "__WebRTC_Alpha__",
                 useMipMap = false,

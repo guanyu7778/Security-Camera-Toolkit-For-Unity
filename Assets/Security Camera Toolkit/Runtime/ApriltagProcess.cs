@@ -245,10 +245,21 @@ public class ApriltagProcess : MonoBehaviour
 
     public void GetCameraPoseInTagFrame(
         Vector3 tagPosCam, Quaternion tagRotCam,
-        out Vector3 camPosInTag, out Quaternion camRotInTag)
+        out Vector3 camPosWorld, out Quaternion camRotWorld)
     {
-        camRotInTag = Quaternion.Inverse(tagRotCam);
-        camPosInTag = -(camRotInTag * tagPosCam);
+        // 1. 相机在 Tag 坐标系下
+        Quaternion camRotInTag = Quaternion.Inverse(tagRotCam);
+        Vector3 camPosInTag = -(camRotInTag * tagPosCam);
+
+        // 2. 定义 Tag 坐标系 → Unity 世界坐标系 的旋转
+        // 假设 Tag 的 +Z = 世界 +Y,  Tag 的 +X = 世界 +Z,  Tag 的 +Y = 世界 +X
+        Vector3 tagForward = -Vector3.up;       // Tag +Z -> 世界 Up
+        Vector3 tagUp      = Vector3.forward;  // Tag +Y -> 世界 Forward (可按需要调整)
+        Quaternion tagToWorld = Quaternion.LookRotation(tagForward, tagUp);
+
+        // 3. 转换到世界系
+        camRotWorld = tagToWorld * camRotInTag;
+        camPosWorld = tagToWorld * camPosInTag;
     }
 
     public void SaveCameraPose(Vector3 pos, Quaternion rot, string fileName = "Configurations/camera_pose.json")

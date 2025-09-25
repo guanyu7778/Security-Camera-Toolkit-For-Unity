@@ -25,8 +25,6 @@ public class MRCompositor : MonoBehaviour
     [SerializeField]
     Text info;
 
-    CameraPoseData cameraPoseData;
-
     void Start()
     {
         StartCoroutine(Init());
@@ -43,11 +41,6 @@ public class MRCompositor : MonoBehaviour
             yield break;
         }
         targetCamera.transform.SetPositionAndRotation(pos, rot);
-        cameraPoseData = new CameraPoseData
-        {
-            position = new float[] { pos.x, pos.y, pos.z },
-            rotation = new float[] { rot.x, rot.y, rot.z, rot.w }
-        };
         info.text = "标定完成";
         Debug.Log($"[MRCompositor] Camera pose loaded from file: pos={pos}, rot={rot.eulerAngles}");
     }
@@ -58,11 +51,7 @@ public class MRCompositor : MonoBehaviour
     {
         if (apriltagProcess.TryGetTagCubeCameraPose(0, out Vector3 pos, out Quaternion rot))
         {
-            cameraPoseData = new CameraPoseData
-            {
-                position = new float[] { pos.x, pos.y, pos.z },
-                rotation = new float[] { rot.x, rot.y, rot.z, rot.w }
-            };
+            Debug.Log(pos + "////" + rot);
             apriltagProcess.SaveCameraPose(pos, rot);
             info.text = "标定OK";
             apriltagProcess.StopAprilTagDetection();

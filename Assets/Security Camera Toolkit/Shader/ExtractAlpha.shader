@@ -1,5 +1,8 @@
 ﻿Shader "Hidden/ExtractAlpha"
 {
+    Properties {
+        _MainTex ("Source", 2D) = "black" {}  // <---- 新增
+    }
     SubShader
     {
         Tags { "RenderType"="Opaque" "Queue"="Overlay" }

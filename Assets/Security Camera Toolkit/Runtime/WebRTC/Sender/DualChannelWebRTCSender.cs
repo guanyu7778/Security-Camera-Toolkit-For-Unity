@@ -359,7 +359,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             EnsureExtractMaterial();
             if (_extractAlphaMaterial == null)
                 return;
-
+            _extractAlphaMaterial.SetTexture("_MainTex", _colorRT);
             Graphics.Blit(_colorRT, _alphaRT, _extractAlphaMaterial);
             if (!_alphaBlitLogged)
             {

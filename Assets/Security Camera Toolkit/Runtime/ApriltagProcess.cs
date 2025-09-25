@@ -133,7 +133,8 @@ public class ApriltagProcess : MonoBehaviour
                 cameraPoseData = new CameraPoseData
                 {
                     position = new float[] { camPos.x, camPos.y, camPos.z },
-                    rotation = new float[] { camRot.x, camRot.y, camRot.z, camRot.w }
+                    rotation = new float[] { camRot.x, camRot.y, camRot.z, camRot.w },
+                    fov = this.fov
                 };
                 OnCameraPoseEstimated?.Invoke(cameraPoseData);
             }
@@ -255,7 +256,8 @@ public class ApriltagProcess : MonoBehaviour
         var data = new CameraPoseData
         {
             position = new float[] { pos.x, pos.y, pos.z },
-            rotation = new float[] { rot.x, rot.y, rot.z, rot.w }
+            rotation = new float[] { rot.x, rot.y, rot.z, rot.w },
+            fov = this.fov
         };
 
         // Newtonsoft.Json 支持格式化缩进
@@ -376,4 +378,5 @@ public class CameraPoseData
 {
     public float[] position;  // x,y,z
     public float[] rotation;  // x,y,z,w (四元数)
+    public float fov;        // 垂直方向 FOV（度），可选
 }

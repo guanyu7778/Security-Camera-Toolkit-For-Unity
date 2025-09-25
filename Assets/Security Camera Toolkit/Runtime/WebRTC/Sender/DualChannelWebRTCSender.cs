@@ -55,6 +55,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         bool _poseTargetMissingLogged;
         bool _poseMessageInvalidLogged;
         bool _poseAppliedLogged;
+        bool _poseFovMissingLogged;
+        bool _poseFovUnsupportedLogged;
 
         RTCPeerConnection _peer;
         VideoStreamTrack _colorTrack;
@@ -682,6 +684,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             _poseTargetMissingLogged = false;
             _poseMessageInvalidLogged = false;
             _poseAppliedLogged = false;
+            _poseFovMissingLogged = false;
+            _poseFovUnsupportedLogged = false;
         }
 
         void HandlePoseDataMessage(byte[] bytes)
@@ -732,6 +736,20 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             var hasPosition = payload.TryGetPosition(out var position);
             var hasRotation = payload.TryGetRotation(out var rotation);
+            var hasFieldOfView = payload.TryGetFieldOfView(out var fieldOfView);
+
+            if (!hasFieldOfView)
+            {
+                if (!_poseFovMissingLogged)
+                {
+                    LogVerbose("Pose message missing field-of-view. Using existing camera value.");
+                    _poseFovMissingLogged = true;
+                }
+            }
+            else
+            {
+                _poseFovMissingLogged = false;
+            }
 
             if (!hasPosition && !hasRotation)
             {
@@ -746,12 +764,13 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             _poseChannelWarningLogged = false;
             _poseMessageInvalidLogged = false;
 
-            UnityMainThreadDispatcher.Enqueue(() => ApplyPoseFromMessage(position, hasPosition, rotation, hasRotation, payload.calibration, payload.timestamp));
+            UnityMainThreadDispatcher.Enqueue(() => ApplyPoseFromMessage(position, hasPosition, rotation, hasRotation, fieldOfView, hasFieldOfView, payload.calibration, payload.timestamp));
         }
 
-        void ApplyPoseFromMessage(Vector3 position, bool hasPosition, Quaternion rotation, bool hasRotation, string calibrationId, string timestamp)
+        void ApplyPoseFromMessage(Vector3 position, bool hasPosition, Quaternion rotation, bool hasRotation, float fieldOfView, bool hasFieldOfView, string calibrationId, string timestamp)
         {
             var targetTransform = ResolvePoseTarget();
+            var poseCamera = targetCamera != null ? targetCamera : sourceCamera;
             if (targetTransform == null)
             {
                 if (!_poseTargetMissingLogged)
@@ -774,11 +793,32 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 targetTransform.rotation = rotation;
             }
 
+            string fovLabel = hasFieldOfView ? "skipped" : "unchanged";
+            if (hasFieldOfView)
+            {
+                if (poseCamera != null && !poseCamera.orthographic)
+                {
+                    var clampedFov = Mathf.Clamp(fieldOfView, 1f, 179f);
+                    poseCamera.fieldOfView = clampedFov;
+                    fovLabel = clampedFov.ToString("F1");
+                    _poseFovUnsupportedLogged = false;
+                }
+                else if (!_poseFovUnsupportedLogged)
+                {
+                    Debug.LogWarning("[DualChannelWebRTCSender] Pose message provided field-of-view but target camera cannot accept it.", this);
+                    _poseFovUnsupportedLogged = true;
+                }
+            }
+            else
+            {
+                _poseFovUnsupportedLogged = false;
+            }
+
             if (verboseLogging && !_poseAppliedLogged)
             {
                 var timestampLabel = string.IsNullOrEmpty(timestamp) ? "n/a" : timestamp;
                 var calibrationLabel = string.IsNullOrEmpty(calibrationId) ? "n/a" : calibrationId;
-                LogVerbose($"Applied remote pose (timestamp={timestampLabel}, calibration={calibrationLabel}, pos={(hasPosition ? position.ToString("F3") : "unchanged")}, rot={(hasRotation ? rotation.eulerAngles.ToString("F1") : "unchanged")})");
+                LogVerbose($"Applied remote pose (timestamp={timestampLabel}, calibration={calibrationLabel}, pos={(hasPosition ? position.ToString("F3") : "unchanged")}, rot={(hasRotation ? rotation.eulerAngles.ToString("F1") : "unchanged")}, fov={fovLabel})");
                 _poseAppliedLogged = true;
             }
         }

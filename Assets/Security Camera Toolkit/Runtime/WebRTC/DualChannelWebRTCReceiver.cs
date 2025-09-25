@@ -555,6 +555,16 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             payload.EnsureConsistency();
 
+            if (!payload.HasFieldOfView)
+            {
+                if (!_poseConfigInvalidLogged)
+                {
+                    Debug.LogWarning("[DualChannelWebRTCReceiver] Pose config missing field-of-view.", this);
+                    _poseConfigInvalidLogged = true;
+                }
+                return false;
+            }
+
             if (!payload.HasPosition || !payload.HasRotation)
             {
                 if (!_poseConfigInvalidLogged)

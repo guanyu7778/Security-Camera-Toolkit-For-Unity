@@ -10,9 +10,11 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         public float[] rotation;
         public string calibration;
         public string timestamp;
+        public float fov;
 
         public bool HasPosition => position != null && position.Length >= 3;
         public bool HasRotation => rotation != null && rotation.Length >= 4;
+        public bool HasFieldOfView => fov > 0f && float.IsFinite(fov);
 
         public bool TryGetPosition(out Vector3 value)
         {
@@ -54,6 +56,18 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             return false;
         }
 
+        public bool TryGetFieldOfView(out float value)
+        {
+            if (HasFieldOfView)
+            {
+                value = fov;
+                return true;
+            }
+
+            value = 0f;
+            return false;
+        }
+
         public bool TryGetPose(out Vector3 positionValue, out Quaternion rotationValue)
         {
             var hasPos = TryGetPosition(out positionValue);
@@ -82,6 +96,11 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                     rotation = null;
                 }
             }
+
+            if (!float.IsFinite(fov) || fov <= 0f)
+            {
+                fov = 0f;
+            }
         }
 
         public string ToJson(bool prettyPrint = false)
@@ -89,7 +108,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             return JsonUtility.ToJson(this, prettyPrint);
         }
 
-        public static CameraPoseMessage FromTransform(Transform transform, string calibrationId = null, string timestampValue = null)
+        public static CameraPoseMessage FromTransform(Transform transform, string calibrationId = null, string timestampValue = null, float? fieldOfView = null)
         {
             if (transform == null)
                 return null;
@@ -99,7 +118,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 position = new[] { transform.position.x, transform.position.y, transform.position.z },
                 rotation = new[] { transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w },
                 calibration = calibrationId,
-                timestamp = string.IsNullOrEmpty(timestampValue) ? DateTime.UtcNow.ToString("o") : timestampValue
+                timestamp = string.IsNullOrEmpty(timestampValue) ? DateTime.UtcNow.ToString("o") : timestampValue,
+                fov = fieldOfView.GetValueOrDefault(0f)
             };
 
             pose.EnsureConsistency();

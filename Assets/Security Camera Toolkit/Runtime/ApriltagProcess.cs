@@ -250,7 +250,7 @@ public class ApriltagProcess : MonoBehaviour
         camPosInTag = -(camRotInTag * tagPosCam);
     }
 
-    public void SaveCameraPose(Vector3 pos, Quaternion rot, string fileName = "camera_pose.json")
+    public void SaveCameraPose(Vector3 pos, Quaternion rot, string fileName = "Configurations/camera_pose.json")
     {
         var data = new CameraPoseData
         {
@@ -266,7 +266,7 @@ public class ApriltagProcess : MonoBehaviour
 
         Debug.Log($"[SaveCameraPose] Saved to {path}");
     }
-    public bool LoadCameraPose(out Vector3 pos, out Quaternion rot, string fileName = "camera_pose.json")
+    public bool LoadCameraPose(out Vector3 pos, out Quaternion rot, string fileName = "Configurations/camera_pose.json")
     {
         string path = Path.Combine(Application.streamingAssetsPath, fileName);
 

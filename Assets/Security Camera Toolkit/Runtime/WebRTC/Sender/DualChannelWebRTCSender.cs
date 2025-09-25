@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Text;
 using Unity.WebRTC;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,6 +11,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
     public class DualChannelWebRTCSender : MonoBehaviour
     {
         const string ExtractAlphaShaderName = "Hidden/ExtractAlpha";
+        const string PoseDataChannelLabel = "pose";
 
         [Header("Source Capture")]
         [Tooltip("Camera that produces the MR composition. If assigned, a RenderTexture is auto-created with the correct format.")]
@@ -36,6 +38,10 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         [Header("Diagnostics")]
         [SerializeField] bool verboseLogging = true;
 
+        [Header("Pose Synchronization")]
+        [Tooltip("Camera whose transform is updated from remote pose messages. Defaults to sourceCamera if left empty.")]
+        [SerializeField] Camera targetCamera;
+
         RenderTexture _colorRT;
         RenderTexture _alphaRT;
         bool _ownsColorRT;
@@ -43,6 +49,12 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         bool _missingExtractShaderLogged;
         bool _alphaBlitLogged;
         bool _previewLogged;
+        RTCDataChannel _poseChannel;
+        bool _poseChannelOpenLogged;
+        bool _poseChannelWarningLogged;
+        bool _poseTargetMissingLogged;
+        bool _poseMessageInvalidLogged;
+        bool _poseAppliedLogged;
 
         RTCPeerConnection _peer;
         VideoStreamTrack _colorTrack;
@@ -536,6 +548,10 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 LogVerbose($"Peer connection state: {state}");
             };
 
+            _peer.OnDataChannel = HandleRemoteDataChannel;
+
+            SetupPoseDataChannel();
+
             _colorTrack = new VideoStreamTrack(_colorRT, CopyTextureHelper.VerticalFlipCopy);
             _colorStream = new MediaStream();
             _colorStream.AddTrack(_colorTrack);
@@ -555,6 +571,225 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 alphaSender.SyncApplicationFramerate = true;
             }
             LogVerbose($"Added alpha track {_alphaRT.width}x{_alphaRT.height}");
+        }
+
+
+        void SetupPoseDataChannel()
+        {
+            if (_peer == null)
+                return;
+
+            var init = new RTCDataChannelInit
+            {
+                ordered = true
+            };
+
+            try
+            {
+                var channel = _peer.CreateDataChannel(PoseDataChannelLabel, init);
+                AttachPoseChannel(channel, remoteInitiated: false);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[DualChannelWebRTCSender] Failed to create pose data channel: {ex.Message}", this);
+            }
+        }
+
+        void HandleRemoteDataChannel(RTCDataChannel channel)
+        {
+            if (channel == null)
+                return;
+
+            if (channel.Label == PoseDataChannelLabel)
+            {
+                AttachPoseChannel(channel, remoteInitiated: true);
+            }
+            else
+            {
+                LogVerbose($"Received unsupported data channel '{channel.Label}' (ignored)");
+            }
+        }
+
+        void AttachPoseChannel(RTCDataChannel channel, bool remoteInitiated)
+        {
+            if (channel == null)
+                return;
+
+            if (_poseChannel == channel)
+                return;
+
+            if (_poseChannel != null)
+            {
+                DisposePoseChannel(true);
+            }
+
+            _poseChannel = channel;
+            ResetPoseDiagnostics();
+
+            var initiated = remoteInitiated;
+            _poseChannel.OnOpen = () => UnityMainThreadDispatcher.Enqueue(() => OnPoseChannelOpen(initiated));
+            _poseChannel.OnClose = () => UnityMainThreadDispatcher.Enqueue(OnPoseChannelClosed);
+            _poseChannel.OnMessage = HandlePoseDataMessage;
+
+            if (_poseChannel.ReadyState == RTCDataChannelState.Open)
+            {
+                OnPoseChannelOpen(initiated);
+            }
+        }
+
+        void OnPoseChannelOpen(bool remoteInitiated)
+        {
+            if (_poseChannelOpenLogged)
+                return;
+
+            LogVerbose(remoteInitiated
+                ? "Pose data channel established (remote)"
+                : "Pose data channel established");
+            _poseChannelOpenLogged = true;
+        }
+
+        void OnPoseChannelClosed()
+        {
+            DisposePoseChannel();
+        }
+
+        void DisposePoseChannel(bool requestClose = false)
+        {
+            if (_poseChannel == null)
+                return;
+
+            var channel = _poseChannel;
+            _poseChannel = null;
+
+            channel.OnOpen = null;
+            channel.OnClose = null;
+            channel.OnMessage = null;
+
+            if (requestClose)
+            {
+                try { channel.Close(); }
+                catch (Exception) { }
+            }
+
+            channel.Dispose();
+            ResetPoseDiagnostics();
+        }
+
+        void ResetPoseDiagnostics()
+        {
+            _poseChannelOpenLogged = false;
+            _poseChannelWarningLogged = false;
+            _poseTargetMissingLogged = false;
+            _poseMessageInvalidLogged = false;
+            _poseAppliedLogged = false;
+        }
+
+        void HandlePoseDataMessage(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0)
+                return;
+
+            string json;
+            try
+            {
+                json = Encoding.UTF8.GetString(bytes);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[DualChannelWebRTCSender] Failed to decode pose message: {ex.Message}", this);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(json))
+                return;
+
+            CameraPoseMessage payload;
+            try
+            {
+                payload = JsonUtility.FromJson<CameraPoseMessage>(json);
+            }
+            catch (Exception ex)
+            {
+                if (!_poseMessageInvalidLogged)
+                {
+                    Debug.LogWarning($"[DualChannelWebRTCSender] Invalid pose message JSON: {ex.Message}", this);
+                    _poseMessageInvalidLogged = true;
+                }
+                return;
+            }
+
+            if (payload == null)
+            {
+                if (!_poseMessageInvalidLogged)
+                {
+                    Debug.LogWarning("[DualChannelWebRTCSender] Received empty pose payload.", this);
+                    _poseMessageInvalidLogged = true;
+                }
+                return;
+            }
+
+            payload.EnsureConsistency();
+
+            var hasPosition = payload.TryGetPosition(out var position);
+            var hasRotation = payload.TryGetRotation(out var rotation);
+
+            if (!hasPosition && !hasRotation)
+            {
+                if (!_poseChannelWarningLogged)
+                {
+                    Debug.LogWarning("[DualChannelWebRTCSender] Pose message missing position and rotation. Ignoring.", this);
+                    _poseChannelWarningLogged = true;
+                }
+                return;
+            }
+
+            _poseChannelWarningLogged = false;
+            _poseMessageInvalidLogged = false;
+
+            UnityMainThreadDispatcher.Enqueue(() => ApplyPoseFromMessage(position, hasPosition, rotation, hasRotation, payload.calibration, payload.timestamp));
+        }
+
+        void ApplyPoseFromMessage(Vector3 position, bool hasPosition, Quaternion rotation, bool hasRotation, string calibrationId, string timestamp)
+        {
+            var targetTransform = ResolvePoseTarget();
+            if (targetTransform == null)
+            {
+                if (!_poseTargetMissingLogged)
+                {
+                    Debug.LogWarning("[DualChannelWebRTCSender] Pose target camera not assigned.", this);
+                    _poseTargetMissingLogged = true;
+                }
+                return;
+            }
+
+            _poseTargetMissingLogged = false;
+
+            if (hasPosition)
+            {
+                targetTransform.position = position;
+            }
+
+            if (hasRotation)
+            {
+                targetTransform.rotation = rotation;
+            }
+
+            if (verboseLogging && !_poseAppliedLogged)
+            {
+                var timestampLabel = string.IsNullOrEmpty(timestamp) ? "n/a" : timestamp;
+                var calibrationLabel = string.IsNullOrEmpty(calibrationId) ? "n/a" : calibrationId;
+                LogVerbose($"Applied remote pose (timestamp={timestampLabel}, calibration={calibrationLabel}, pos={(hasPosition ? position.ToString("F3") : "unchanged")}, rot={(hasRotation ? rotation.eulerAngles.ToString("F1") : "unchanged")})");
+                _poseAppliedLogged = true;
+            }
+        }
+
+        Transform ResolvePoseTarget()
+        {
+            if (targetCamera != null)
+                return targetCamera.transform;
+            if (sourceCamera != null)
+                return sourceCamera.transform;
+            return null;
         }
 
         void HandleLocalIceCandidate(RTCIceCandidate candidate)
@@ -667,6 +902,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
         void CleanupPeer()
         {
+            DisposePoseChannel(true);
             _alphaStream?.Dispose();
             _alphaStream = null;
             _colorStream?.Dispose();

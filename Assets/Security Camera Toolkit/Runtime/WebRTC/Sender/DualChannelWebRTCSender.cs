@@ -44,11 +44,13 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
         RenderTexture _colorRT;
         RenderTexture _alphaRT;
+        RenderTexture _packedRT;
         bool _ownsColorRT;
         Material _extractAlphaMaterial;
         bool _missingExtractShaderLogged;
         bool _alphaBlitLogged;
         bool _previewLogged;
+        bool _compositePackedWarningLogged;
         RTCDataChannel _poseChannel;
         bool _poseChannelOpenLogged;
         bool _poseChannelWarningLogged;
@@ -59,10 +61,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         bool _poseFovUnsupportedLogged;
 
         RTCPeerConnection _peer;
-        VideoStreamTrack _colorTrack;
-        VideoStreamTrack _alphaTrack;
-        MediaStream _colorStream;
-        MediaStream _alphaStream;
+        VideoStreamTrack _videoTrack;
+        MediaStream _videoStream;
         Coroutine _startRoutine;
         bool _isStreaming;
         bool _signalerHooked;
@@ -105,6 +105,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             HookSignaler(true);
             EnsureRenderTargets();
             UpdateAlphaTextureIfNeeded();
+            UpdatePackedTexture();
             UpdatePreview();
 
             if (autoConnectSignaler && signaler != null && !signaler.Connected)
@@ -147,6 +148,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             }
 
             UpdateAlphaTextureIfNeeded();
+            UpdatePackedTexture();
             UpdatePreview();
         }
 
@@ -156,6 +158,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             LogVerbose($"SetSourceTexture: {(texture ? texture.width + "x" + texture.height : "null")}");
             EnsureRenderTargets();
             UpdateAlphaTextureIfNeeded();
+            UpdatePackedTexture();
             UpdatePreview();
         }
 
@@ -240,6 +243,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             }
 
             EnsureAlphaTexture();
+            EnsurePackedTexture();
             EnsureExtractMaterial();
         }
 
@@ -330,6 +334,13 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 _alphaRT = null;
             }
 
+            if (_packedRT != null)
+            {
+                _packedRT.Release();
+                Destroy(_packedRT);
+                _packedRT = null;
+            }
+
             var alphaFormat = GetColorRenderTextureFormat(); // Mirror color format so WebRTC accepts the stream.
             _alphaRT = new RenderTexture(_colorRT.width, _colorRT.height, 0, alphaFormat)
             {
@@ -342,6 +353,42 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             _alphaRT.Create();
             _alphaBlitLogged = false;
             LogVerbose($"Created alpha RT {_alphaRT.width}x{_alphaRT.height}");
+        }
+
+        void EnsurePackedTexture()
+        {
+            if (_colorRT == null)
+                return;
+
+            int expectedWidth = _colorRT.width;
+            int expectedHeight = _colorRT.height * 2;
+
+            bool needsRecreate = _packedRT == null
+                                  || _packedRT.width != expectedWidth
+                                  || _packedRT.height != expectedHeight
+                                  || !_packedRT.IsCreated();
+
+            if (!needsRecreate)
+                return;
+
+            if (_packedRT != null)
+            {
+                _packedRT.Release();
+                Destroy(_packedRT);
+                _packedRT = null;
+            }
+
+            var format = GetColorRenderTextureFormat();
+            _packedRT = new RenderTexture(expectedWidth, expectedHeight, 0, format)
+            {
+                name = "__WebRTC_Packed__",
+                useMipMap = false,
+                autoGenerateMips = false,
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            _packedRT.Create();
+            LogVerbose($"Created packed RT {_packedRT.width}x{_packedRT.height}");
         }
 
         void EnsureExtractMaterial()
@@ -382,25 +429,81 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             }
         }
 
+        void UpdatePackedTexture()
+        {
+            if (_packedRT == null || _colorRT == null)
+                return;
+
+            int width = _colorRT.width;
+            int height = _colorRT.height;
+
+            var previous = RenderTexture.active;
+            RenderTexture.active = _packedRT;
+            GL.PushMatrix();
+            try
+            {
+                GL.LoadPixelMatrix(0f, _packedRT.width, 0f, _packedRT.height);
+                GL.Clear(false, true, Color.black);
+
+                var topRect = new Rect(0f, height, width, height);
+                Graphics.DrawTexture(topRect, _colorRT);
+
+                var bottomSource = (Texture)(_alphaRT != null ? _alphaRT : Texture2D.blackTexture);
+                var bottomRect = new Rect(0f, 0f, width, height);
+                Graphics.DrawTexture(bottomRect, bottomSource);
+            }
+            finally
+            {
+                GL.PopMatrix();
+                RenderTexture.active = previous;
+            }
+        }
+
         void UpdatePreview()
         {
             if (compositePreview == null)
                 return;
 
+            Texture displayTex = _packedRT ?? (Texture)_colorRT;
+
             if (compositeMaterial != null && applyCompositeMaterial)
             {
-                compositeMaterial.SetTexture("_ColorTex", _colorRT);
-                compositeMaterial.SetTexture("_AlphaTex", _alphaRT);
-                compositePreview.material = compositeMaterial;
-                compositePreview.texture = _colorRT;
+                bool applied = false;
+                if (_packedRT != null && compositeMaterial.HasProperty("_PackedTex"))
+                {
+                    compositeMaterial.SetTexture("_PackedTex", _packedRT);
+                    applied = true;
+                }
+                else if (_colorRT != null && _alphaRT != null && compositeMaterial.HasProperty("_ColorTex") && compositeMaterial.HasProperty("_AlphaTex"))
+                {
+                    compositeMaterial.SetTexture("_ColorTex", _colorRT);
+                    compositeMaterial.SetTexture("_AlphaTex", _alphaRT);
+                    applied = true;
+                }
+
+                if (!applied)
+                {
+                    if (!_compositePackedWarningLogged)
+                    {
+                        Debug.LogWarning("[DualChannelWebRTCSender] Composite material is missing expected texture properties (_PackedTex or _ColorTex/_AlphaTex).", this);
+                        _compositePackedWarningLogged = true;
+                    }
+                }
+                else
+                {
+                    _compositePackedWarningLogged = false;
+                }
+
+                compositePreview.material = applied ? compositeMaterial : null;
+                compositePreview.texture = displayTex;
             }
             else
             {
                 compositePreview.material = null;
-                compositePreview.texture = _colorRT;
+                compositePreview.texture = displayTex;
             }
 
-            if (!_previewLogged && _colorRT != null)
+            if (!_previewLogged && displayTex != null)
             {
                 LogVerbose("Preview updated with current textures");
                 _previewLogged = true;
@@ -428,6 +531,13 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 Destroy(_alphaRT);
                 _alphaRT = null;
             }
+
+            if (_packedRT != null)
+            {
+                _packedRT.Release();
+                Destroy(_packedRT);
+                _packedRT = null;
+            }
         }
 
         void DisposeExtractMaterial()
@@ -452,8 +562,10 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             EnsureRenderTargets();
             UpdateAlphaTextureIfNeeded();
+            EnsurePackedTexture();
+            UpdatePackedTexture();
 
-            if (_colorRT == null || _alphaRT == null)
+            if (_colorRT == null || _alphaRT == null || _packedRT == null)
             {
                 Debug.LogError("[DualChannelWebRTCSender] Missing render textures. Cannot start streaming.", this);
                 return;
@@ -465,7 +577,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 return;
             }
 
-            LogVerbose($"Starting streaming with color {_colorRT.width}x{_colorRT.height} and alpha {_alphaRT.width}x{_alphaRT.height}");
+            LogVerbose($"Starting streaming with packed {_packedRT.width}x{_packedRT.height} (source {_colorRT.width}x{_colorRT.height})");
             _startRoutine = StartCoroutine(BeginStreamingRoutine());
         }
 
@@ -537,7 +649,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         {
             CleanupPeer();
 
-            if (_colorRT == null || _alphaRT == null)
+            if (_packedRT == null)
             {
                 Debug.LogError("[DualChannelWebRTCSender] Render textures not ready.", this);
                 return;
@@ -554,29 +666,17 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
 
             SetupPoseDataChannel();
 
-            _colorTrack = new VideoStreamTrack(_colorRT, CopyTextureHelper.VerticalFlipCopy);
-            _colorStream = new MediaStream();
-            _colorStream.AddTrack(_colorTrack);
-            var colorSender = _peer.AddTrack(_colorTrack, _colorStream);
-            if (colorSender != null)
+            _videoTrack = new VideoStreamTrack(_packedRT, CopyTextureHelper.VerticalFlipCopy);
+            _videoStream = new MediaStream();
+            _videoStream.AddTrack(_videoTrack);
+            var videoSender = _peer.AddTrack(_videoTrack, _videoStream);
+            if (videoSender != null)
             {
-                ApplyEncodingLimits(colorSender, maxFps: 30, maxKbps: 2500);
-                //colorSender.SyncApplicationFramerate = true;
+                ApplyEncodingLimits(videoSender, maxFps: 30, maxKbps: 3500);
+                //videoSender.SyncApplicationFramerate = true;
             }
-            LogVerbose($"Added color track {_colorRT.width}x{_colorRT.height}");
-
-            _alphaTrack = new VideoStreamTrack(_alphaRT, CopyTextureHelper.VerticalFlipCopy);
-            _alphaStream = new MediaStream();
-            _alphaStream.AddTrack(_alphaTrack);
-            var alphaSender = _peer.AddTrack(_alphaTrack, _alphaStream);
-            if (alphaSender != null)
-            {
-                ApplyEncodingLimits(alphaSender, maxFps: 30, maxKbps: 1000);
-                //alphaSender.SyncApplicationFramerate = true;
-            }
-            LogVerbose($"Added alpha track {_alphaRT.width}x{_alphaRT.height}");
+            LogVerbose($"Added packed track {_packedRT.width}x{_packedRT.height}");
         }
-
 
         void ApplyEncodingLimits(Unity.WebRTC.RTCRtpSender sender, int maxFps, int maxKbps)
         {
@@ -589,10 +689,10 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             p.encodings[0].maxFramerate = 30; // maxFps;
             p.encodings[0].maxBitrate   = (ulong)maxKbps * 1000;
 
-            // 可选：如果 API 暴露了 scaleResolutionDownBy（某些版本有）
-            // p.encodings[0].scaleResolutionDownBy = 1.0; // 彩色不降分辨率
+            // 可选：如果 API 暴露�?scaleResolutionDownBy（某些版本有�?
+            // p.encodings[0].scaleResolutionDownBy = 1.0; // 彩色不降分辨�?
             var err = sender.SetParameters(p);
-            // 生产里可检查 err 是否为 RTCError.None
+            // 生产里可检�?err 是否�?RTCError.None
         }
 
         void SetupPoseDataChannel()
@@ -962,15 +1062,11 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         void CleanupPeer()
         {
             DisposePoseChannel(true);
-            _alphaStream?.Dispose();
-            _alphaStream = null;
-            _colorStream?.Dispose();
-            _colorStream = null;
+            _videoStream?.Dispose();
+            _videoStream = null;
 
-            _alphaTrack?.Dispose();
-            _alphaTrack = null;
-            _colorTrack?.Dispose();
-            _colorTrack = null;
+            _videoTrack?.Dispose();
+            _videoTrack = null;
 
             if (_peer != null)
             {
@@ -981,7 +1077,6 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
                 LogVerbose("Peer connection disposed");
             }
         }
-
         void LogVerbose(string message)
         {
             if (verboseLogging)
@@ -991,5 +1086,3 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         }
     }
 }
-
-

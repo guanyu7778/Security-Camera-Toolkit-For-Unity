@@ -41,12 +41,16 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         [SerializeField] float poseSendIntervalSeconds = 2f;
 
         WebSocketServer _wsServer;
-        readonly Dictionary<string, PeerContext> _peers = new();
+        readonly Dictionary<string, PeerContext> _peers = new Dictionary<string, PeerContext>();
         PeerContext _activePeer;
         RTCConfiguration _config;
         bool _poseConfigMissingLogged;
         bool _poseConfigParseLogged;
         bool _poseConfigInvalidLogged;
+
+        Rect _colorPreviewDefaultUV = new Rect(0f, 0f, 1f, 1f);
+        Rect _alphaPreviewDefaultUV = new Rect(0f, 0f, 1f, 1f);
+        bool _compositePackedWarningLogged;
 
         void Awake()
         {
@@ -54,6 +58,11 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             {
                 iceServers = BuildIceServers(iceServerUrls)
             };
+
+            if (colorPreview != null)
+                _colorPreviewDefaultUV = colorPreview.uvRect;
+            if (alphaPreview != null)
+                _alphaPreviewDefaultUV = alphaPreview.uvRect;
         }
 
         static RTCIceServer[] BuildIceServers(string[] urls)
@@ -242,89 +251,102 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             behavior.SendJson(message.ToJson());
         }
 
-        void HandleTrack(PeerContext ctx, RTCTrackEvent e)
+        private void HandleTrack(PeerContext ctx, RTCTrackEvent e)
         {
-            if (e.Track is not VideoStreamTrack videoTrack)
+            if (!(e.Track is VideoStreamTrack videoTrack))
                 return;
 
-            LogVerbose($"Peer {ctx.id} received track kind={videoTrack.Kind} texture={(videoTrack.Texture ? videoTrack.Texture.width + "x" + videoTrack.Texture.height : "null")}");
+            var trackTexture = videoTrack.Texture;
+            string texInfo = trackTexture != null ? $"{trackTexture.width}x{trackTexture.height}" : "null";
+            LogVerbose($"Peer {ctx.id} received track kind={videoTrack.Kind} texture={texInfo}");
 
-            if (ctx.colorTrack == null)
-            {
-                ctx.colorTrack = videoTrack;
-                ctx.colorHandler = tex => OnColorFrame(ctx, tex);
-                videoTrack.OnVideoReceived += ctx.colorHandler;
-                ctx.colorTexture = videoTrack.Texture;
-                PromoteActivePeer(ctx);
-                ApplyTexturesToUI(ctx);
-            }
-            else if (ctx.alphaTrack == null)
-            {
-                ctx.alphaTrack = videoTrack;
-                ctx.alphaHandler = tex => OnAlphaFrame(ctx, tex);
-                videoTrack.OnVideoReceived += ctx.alphaHandler;
-                ctx.alphaTexture = videoTrack.Texture;
-                ApplyTexturesToUI(ctx);
-            }
-            else
+            if (ctx.packedTrack != null)
             {
                 LogVerbose($"Peer {ctx.id} received extra track (ignored)");
+                return;
             }
+
+            ctx.packedTrack = videoTrack;
+            ctx.packedHandler = tex => OnPackedFrame(ctx, tex);
+            videoTrack.OnVideoReceived += ctx.packedHandler;
+            ctx.packedTexture = videoTrack.Texture;
+            PromoteActivePeer(ctx);
+            ApplyTexturesToUI(ctx);
         }
 
-        void PromoteActivePeer(PeerContext ctx)
+        private void PromoteActivePeer(PeerContext ctx)
         {
             _activePeer = ctx;
             LogVerbose($"Active peer set to {ctx.id}");
         }
 
-        void OnColorFrame(PeerContext ctx, Texture tex)
+        private void OnPackedFrame(PeerContext ctx, Texture tex)
         {
-            ctx.colorTexture = tex;
-            if (!ctx.loggedFirstColorFrame)
+            ctx.packedTexture = tex;
+            if (!ctx.loggedFirstFrame)
             {
-                LogVerbose($"First color frame from {ctx.id}: {(tex ? tex.width + "x" + tex.height : "null")}");
-                ctx.loggedFirstColorFrame = true;
+                LogVerbose($"First packed frame from {ctx.id}");
+                ctx.loggedFirstFrame = true;
             }
             ApplyTexturesToUI(ctx);
         }
 
-        void OnAlphaFrame(PeerContext ctx, Texture tex)
-        {
-            ctx.alphaTexture = tex;
-            if (!ctx.loggedFirstAlphaFrame)
-            {
-                LogVerbose($"First alpha frame from {ctx.id}: {(tex ? tex.width + "x" + tex.height : "null")}");
-                ctx.loggedFirstAlphaFrame = true;
-            }
-            ApplyTexturesToUI(ctx);
-        }
-
-        void ApplyTexturesToUI(PeerContext ctx)
+        private void ApplyTexturesToUI(PeerContext ctx)
         {
             if (ctx != _activePeer)
                 return;
 
-            if (colorPreview != null && ctx.colorTexture != null)
+            if (ctx.packedTexture == null)
+                return;
+
+            if (colorPreview != null)
             {
-                colorPreview.texture = ctx.colorTexture;
+                colorPreview.texture = ctx.packedTexture;
+                colorPreview.uvRect = new Rect(0f, 0.5f, 1f, 0.5f);
             }
 
-            if (alphaPreview != null && ctx.alphaTexture != null)
+            if (alphaPreview != null)
             {
-                alphaPreview.texture = ctx.alphaTexture;
+                alphaPreview.texture = ctx.packedTexture;
+                alphaPreview.uvRect = new Rect(0f, 0f, 1f, 0.5f);
             }
 
-            if (compositePreview != null && ctx.colorTexture != null && compositeMaterial != null)
+            if (compositePreview != null)
             {
-                compositeMaterial.SetTexture("_ColorTex", ctx.colorTexture);
-                compositeMaterial.SetTexture("_AlphaTex", ctx.alphaTexture ?? Texture2D.blackTexture);
-                compositePreview.texture = ctx.colorTexture;
-                compositePreview.material = autoApplyCompositeMaterial ? compositeMaterial : null;
+                bool applied = false;
+                if (compositeMaterial != null)
+                {
+                    if (compositeMaterial.HasProperty("_PackedTex"))
+                    {
+                        compositeMaterial.SetTexture("_PackedTex", ctx.packedTexture);
+                        applied = true;
+                    }
+                    else if (!_compositePackedWarningLogged)
+                    {
+                        Debug.LogWarning("[DualChannelWebRTCReceiver] Composite material is missing the _PackedTex property. Assign the new 'CompositePackedColorAlpha' shader or disable auto-apply.", this);
+                        _compositePackedWarningLogged = true;
+                    }
+                }
+
+                if (applied)
+                {
+                    _compositePackedWarningLogged = false;
+                }
+
+                if (autoApplyCompositeMaterial && compositeMaterial != null && applied)
+                {
+                    compositePreview.material = compositeMaterial;
+                }
+                else if (!autoApplyCompositeMaterial || compositeMaterial == null || !applied)
+                {
+                    compositePreview.material = null;
+                }
+
+                compositePreview.texture = ctx.packedTexture;
             }
         }
 
-        void HandleDataChannel(PeerContext ctx, RTCDataChannel channel)
+        private void HandleDataChannel(PeerContext ctx, RTCDataChannel channel)
         {
             if (ctx == null || channel == null)
                 return;
@@ -580,7 +602,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             return true;
         }
 
-        void SendLocalIce(PeerContext ctx, RTCIceCandidate candidate)
+        private void SendLocalIce(PeerContext ctx, RTCIceCandidate candidate)
         {
             var message = SignalingMessage.CreateIce(candidate);
             candidate?.Dispose();
@@ -591,7 +613,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             LogVerbose($"-> {ctx.id}: ice candidate (len={message.candidate.candidate?.Length ?? 0})");
         }
 
-        void ApplyRemoteIce(PeerContext ctx, SignalingMessage.IceCandidatePayload payload)
+        private void ApplyRemoteIce(PeerContext ctx, SignalingMessage.IceCandidatePayload payload)
         {
             if (ctx.peer == null || payload == null)
                 return;
@@ -610,7 +632,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             }
         }
 
-        PeerContext GetOrCreateContext(string clientId, ReceiverBehavior behavior)
+        private PeerContext GetOrCreateContext(string clientId, ReceiverBehavior behavior)
         {
             if (_peers.TryGetValue(clientId, out var ctx))
             {
@@ -628,7 +650,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             return ctx;
         }
 
-        void RemovePeer(string clientId)
+        private void RemovePeer(string clientId)
         {
             if (_peers.TryGetValue(clientId, out var ctx))
             {
@@ -638,7 +660,7 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             }
         }
 
-        void CleanupPeer(PeerContext ctx)
+        private void CleanupPeer(PeerContext ctx)
         {
             if (ctx == null)
                 return;
@@ -646,38 +668,40 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             StopPoseRoutine(ctx);
             DisposePoseChannel(ctx, true);
 
-            if (ctx.colorTrack != null && ctx.colorHandler != null)
+            if (ctx.packedTrack != null && ctx.packedHandler != null)
             {
-                ctx.colorTrack.OnVideoReceived -= ctx.colorHandler;
-                ctx.colorTrack.Dispose();
-            }
-            if (ctx.alphaTrack != null && ctx.alphaHandler != null)
-            {
-                ctx.alphaTrack.OnVideoReceived -= ctx.alphaHandler;
-                ctx.alphaTrack.Dispose();
+                ctx.packedTrack.OnVideoReceived -= ctx.packedHandler;
+                ctx.packedTrack.Dispose();
             }
 
             ctx.peer?.Close();
             ctx.peer?.Dispose();
             ctx.peer = null;
-            ctx.colorTrack = null;
-            ctx.alphaTrack = null;
-            ctx.colorTexture = null;
-            ctx.alphaTexture = null;
-            ctx.loggedFirstAlphaFrame = false;
-            ctx.loggedFirstColorFrame = false;
+            ctx.packedTrack = null;
+            ctx.packedTexture = null;
+            ctx.packedHandler = null;
+            ctx.loggedFirstFrame = false;
 
             if (_activePeer == ctx)
             {
                 _activePeer = null;
-                if (colorPreview != null) colorPreview.texture = null;
-                if (alphaPreview != null) alphaPreview.texture = null;
+                if (colorPreview != null)
+                {
+                    colorPreview.texture = null;
+                    colorPreview.uvRect = _colorPreviewDefaultUV;
+                }
+                if (alphaPreview != null)
+                {
+                    alphaPreview.texture = null;
+                    alphaPreview.uvRect = _alphaPreviewDefaultUV;
+                }
                 if (compositePreview != null)
                 {
                     compositePreview.texture = null;
                     if (autoApplyCompositeMaterial)
                         compositePreview.material = null;
                 }
+                _compositePackedWarningLogged = false;
             }
         }
 
@@ -686,18 +710,13 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             public string id;
             public ReceiverBehavior behavior;
             public RTCPeerConnection peer;
-            public VideoStreamTrack colorTrack;
-            public VideoStreamTrack alphaTrack;
-            public Texture colorTexture;
-            public Texture alphaTexture;
-            public Unity.WebRTC.OnVideoReceived colorHandler;
-            public Unity.WebRTC.OnVideoReceived alphaHandler;
+            public VideoStreamTrack packedTrack;
+            public Texture packedTexture;
+            public Unity.WebRTC.OnVideoReceived packedHandler;
             public RTCDataChannel poseChannel;
             public Coroutine poseRoutine;
-            public bool loggedFirstColorFrame;
-            public bool loggedFirstAlphaFrame;
+            public bool loggedFirstFrame;
         }
-
         public class ReceiverBehavior : WebSocketBehavior
         {
             readonly DualChannelWebRTCReceiver _owner;
@@ -744,4 +763,3 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
         }
     }
 }
-

@@ -560,7 +560,8 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             var colorSender = _peer.AddTrack(_colorTrack, _colorStream);
             if (colorSender != null)
             {
-                colorSender.SyncApplicationFramerate = true;
+                ApplyEncodingLimits(colorSender, maxFps: 30, maxKbps: 2500);
+                //colorSender.SyncApplicationFramerate = true;
             }
             LogVerbose($"Added color track {_colorRT.width}x{_colorRT.height}");
 
@@ -570,11 +571,29 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             var alphaSender = _peer.AddTrack(_alphaTrack, _alphaStream);
             if (alphaSender != null)
             {
-                alphaSender.SyncApplicationFramerate = true;
+                ApplyEncodingLimits(alphaSender, maxFps: 30, maxKbps: 1000);
+                //alphaSender.SyncApplicationFramerate = true;
             }
             LogVerbose($"Added alpha track {_alphaRT.width}x{_alphaRT.height}");
         }
 
+
+        void ApplyEncodingLimits(Unity.WebRTC.RTCRtpSender sender, int maxFps, int maxKbps)
+        {
+            if (sender == null) return;
+            var p = sender.GetParameters();
+            if (p.encodings == null || p.encodings.Length == 0)
+                p.encodings = new[] { new Unity.WebRTC.RTCRtpEncodingParameters() };
+
+            // 单路编码（不分层）。注意：单位 bps
+            p.encodings[0].maxFramerate = 30; // maxFps;
+            p.encodings[0].maxBitrate   = (ulong)maxKbps * 1000;
+
+            // 可选：如果 API 暴露了 scaleResolutionDownBy（某些版本有）
+            // p.encodings[0].scaleResolutionDownBy = 1.0; // 彩色不降分辨率
+            var err = sender.SetParameters(p);
+            // 生产里可检查 err 是否为 RTCError.None
+        }
 
         void SetupPoseDataChannel()
         {

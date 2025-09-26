@@ -434,28 +434,36 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             if (_packedRT == null || _colorRT == null)
                 return;
 
-            int width = _colorRT.width;
-            int height = _colorRT.height;
+            int w = _colorRT.width;
+            int h = _colorRT.height;
 
-            var previous = RenderTexture.active;
+            // 保险起见：如果打包RT尺寸不对，别画了（也能在别处统一Ensure）
+            if (_packedRT.width != w || _packedRT.height != 2 * h)
+                return;
+
+            var prev = RenderTexture.active;
             RenderTexture.active = _packedRT;
             GL.PushMatrix();
             try
             {
-                GL.LoadPixelMatrix(0f, _packedRT.width, 0f, _packedRT.height);
+                // 关键：把像素矩阵的Y轴倒过来（top=0, bottom=2h）
+                GL.LoadPixelMatrix(0f, w, 2f * h, 0f);
+
                 GL.Clear(false, true, Color.black);
 
-                var topRect = new Rect(0f, height, width, height);
+                // 上半区：y∈[0, h)
+                var topRect = new Rect(0f, 0f, w, h);
                 Graphics.DrawTexture(topRect, _colorRT);
 
-                var bottomSource = (Texture)(_alphaRT != null ? _alphaRT : Texture2D.blackTexture);
-                var bottomRect = new Rect(0f, 0f, width, height);
-                Graphics.DrawTexture(bottomRect, bottomSource);
+                // 下半区：y∈[h, 2h)
+                var alphaSrc = (Texture)(_alphaRT != null ? _alphaRT : Texture2D.blackTexture);
+                var bottomRect = new Rect(0f, h, w, h);
+                Graphics.DrawTexture(bottomRect, alphaSrc);
             }
             finally
             {
                 GL.PopMatrix();
-                RenderTexture.active = previous;
+                RenderTexture.active = prev;
             }
         }
 

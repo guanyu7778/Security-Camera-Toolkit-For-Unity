@@ -21,6 +21,13 @@ namespace zFramework.Media
 
         #region Single Instance / 单例
         static NVRConfiguration _instance;
+
+        private void OnEnable() => _instance = this;
+        private void OnDisable()
+        {
+            if (_instance == this) _instance = null;
+        }
+
         public static NVRConfiguration Instance => Load();
         private static NVRConfiguration Load()
         {

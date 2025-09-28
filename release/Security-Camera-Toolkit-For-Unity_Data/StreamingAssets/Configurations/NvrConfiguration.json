@@ -1,0 +1,14 @@
+﻿{
+    "arr": [
+        {
+            "host": "192.168.0.202:8000",
+            "type": 0,
+            "mapping": "",
+            "enableMapping": false,
+            "userName": "admin",
+            "password": "lx20111205",
+            "enable": true,
+            "description": "此配置由机器生成，请补全信息！"
+        }
+    ]
+}

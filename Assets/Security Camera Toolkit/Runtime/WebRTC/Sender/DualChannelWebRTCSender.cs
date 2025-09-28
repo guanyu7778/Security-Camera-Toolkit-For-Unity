@@ -202,6 +202,16 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             }
         }
 
+        void OnApplicationPause(bool pauseState)
+        {
+            if (!pauseState)
+                return;
+
+            LogVerbose("Application paused; stopping streaming and closing signaler");
+            StopStreamingInternal(sendBye: false);
+            signaler?.Disconnect();
+        }
+
         void HookSignaler(bool on)
         {
             if (signaler == null)

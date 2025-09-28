@@ -42,6 +42,12 @@ public class LanWebSocketSignaler : MonoBehaviour
         return wasConnected;
     }
 
+    public void Disconnect()
+    {
+        Debug.Log("[Signaler] Disconnect requested", this);
+        CloseWebSocket();
+    }
+
     void CloseWebSocket()
     {
         if (_ws == null)

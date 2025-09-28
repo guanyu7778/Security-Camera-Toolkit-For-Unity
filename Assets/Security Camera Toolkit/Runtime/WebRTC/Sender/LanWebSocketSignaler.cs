@@ -18,6 +18,50 @@ public class LanWebSocketSignaler : MonoBehaviour
 
     public bool Connected => _ws != null && _ws.IsAlive;
 
+    public bool SetWebSocketUrl(string newUrl)
+    {
+        if (string.IsNullOrWhiteSpace(newUrl))
+        {
+            Debug.LogWarning("[Signaler] Ignoring empty wsUrl update", this);
+            return Connected;
+        }
+
+        newUrl = newUrl.Trim();
+        bool wasConnected = Connected;
+        if (!string.Equals(wsUrl, newUrl, StringComparison.Ordinal))
+        {
+            Debug.Log($"[Signaler] Updating wsUrl to {newUrl}", this);
+        }
+        else if (wasConnected)
+        {
+            Debug.Log("[Signaler] wsUrl unchanged, forcing reconnection", this);
+        }
+
+        wsUrl = newUrl;
+        CloseWebSocket();
+        return wasConnected;
+    }
+
+    void CloseWebSocket()
+    {
+        if (_ws == null)
+            return;
+
+        try
+        {
+            _ws.Close();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[Signaler] Exception while closing WS: {ex.Message}", this);
+        }
+        finally
+        {
+            _ws = null;
+        }
+    }
+
+
     public void Connect()
     {
         if (_ws != null && _ws.IsAlive)
@@ -129,8 +173,6 @@ public class LanWebSocketSignaler : MonoBehaviour
 
     void OnDestroy()
     {
-        try { _ws?.Close(); }
-        catch { }
-        _ws = null;
+        CloseWebSocket();
     }
 }

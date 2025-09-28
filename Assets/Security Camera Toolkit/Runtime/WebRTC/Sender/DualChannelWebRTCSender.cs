@@ -162,6 +162,46 @@ namespace SecurityCameraToolkit.Runtime.WebRTC
             UpdatePreview();
         }
 
+        public void SetSignalerUrl(string newWsUrl)
+        {
+            if (string.IsNullOrWhiteSpace(newWsUrl))
+            {
+                Debug.LogWarning("[DualChannelWebRTCSender] Ignoring empty signaling url update.", this);
+                return;
+            }
+
+            newWsUrl = newWsUrl.Trim();
+            LogVerbose($"SetSignalerUrl -> {newWsUrl}");
+
+            bool hasSignaler = signaler != null;
+            bool sendBye = hasSignaler && signaler.Connected;
+
+            StopStreamingInternal(sendBye);
+
+            if (!hasSignaler)
+            {
+                Debug.LogWarning("[DualChannelWebRTCSender] No LanWebSocketSignaler assigned; cannot update wsUrl.", this);
+                return;
+            }
+
+            bool wasConnected = signaler.SetWebSocketUrl(newWsUrl);
+
+            if (autoConnectSignaler)
+            {
+                signaler.Connect();
+            }
+            else if (wasConnected)
+            {
+                LogVerbose("autoConnectSignaler is disabled; wsUrl updated without reconnecting.");
+            }
+
+            if (autoStartWhenConnected && signaler.Connected && !_isStreaming)
+            {
+                LogVerbose("Signaler already connected after URL update; starting streaming.");
+                StartStreaming();
+            }
+        }
+
         void HookSignaler(bool on)
         {
             if (signaler == null)
